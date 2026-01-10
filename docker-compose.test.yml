@@ -1,0 +1,42 @@
+# VoxDocs Test Setup - Einfaches lokales Testen
+#
+# Starten mit: docker-compose -f docker-compose.test.yml up --build
+#
+# Dann im Browser: http://localhost:3000
+
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: voxdocs-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - SECRET_KEY=test-secret-key-for-local-dev
+      - MASTER_KEY=test-master-key-32-bytes-long!!
+      - WHISPER_MODEL=small
+      - WHISPER_DEVICE=cpu
+      - BATCH_PROCESSING_HOUR=2
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: voxdocs-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
