@@ -3,7 +3,7 @@
  */
 
 import { audioApi, onboardingApi } from './api'
-import { offlineStorage, PendingRecording, PendingPhrase } from './offlineStorage'
+import { offlineStorage } from './offlineStorage'
 
 type SyncStatus = 'idle' | 'syncing' | 'error'
 type SyncListener = (status: SyncStatus, pending: { recordings: number; phrases: number }) => void

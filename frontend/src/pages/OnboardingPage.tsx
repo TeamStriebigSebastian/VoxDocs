@@ -25,7 +25,6 @@ export default function OnboardingPage() {
   const [progress, setProgress] = useState({ completed: 0, total: 0 })
   const [speakerName, setSpeakerName] = useState('')
   const [speakerNotes, setSpeakerNotes] = useState('')
-  const [offlineCount, setOfflineCount] = useState(0)
 
   const currentCategory = categories[currentCategoryIndex]
   const currentPhrase = currentCategory?.phrases[currentPhraseIndex]
@@ -34,7 +33,7 @@ export default function OnboardingPage() {
     if (!sessionId || !currentCategory || !currentPhrase) return
 
     try {
-      const { success, offline } = await syncService.uploadPhrase(
+      const { success } = await syncService.uploadPhrase(
         sessionId,
         blob,
         currentCategory.category,
@@ -43,17 +42,13 @@ export default function OnboardingPage() {
       )
 
       if (success) {
-        // Update local state
+        // Update local state (works both online and offline)
         const updatedCategories = [...categories]
         updatedCategories[currentCategoryIndex].phrases[currentPhraseIndex].is_recorded = true
         updatedCategories[currentCategoryIndex].completed_phrases += 1
         setCategories(updatedCategories)
 
         setProgress((prev) => ({ ...prev, completed: prev.completed + 1 }))
-
-        if (offline) {
-          setOfflineCount(prev => prev + 1)
-        }
 
         // Move to next phrase
         moveToNext()
