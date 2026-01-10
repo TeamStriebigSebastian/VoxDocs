@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAppStore } from '../stores/appStore'
 import { onboardingApi } from '../services/api'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'

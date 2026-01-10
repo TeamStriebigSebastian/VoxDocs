@@ -76,7 +76,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         }
       }
 
-      mediaRecorder.onerror = (event) => {
+      mediaRecorder.onerror = () => {
         const err = new Error('Recording error occurred')
         setError(err)
         if (options.onError) {
