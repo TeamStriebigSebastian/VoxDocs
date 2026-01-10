@@ -9,8 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 import sys
 
+from app.core.config import settings, ensure_directories
+
+# Ensure directories exist before anything else
+ensure_directories()
+
 from app.api import audio, transcription, classification, health, onboarding, export
-from app.core.config import settings
 from app.core.database import init_db
 from app.services.queue_service import queue_service
 
@@ -22,13 +26,16 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     level="INFO"
 )
-logger.add(
-    "logs/voxdocs.log",
-    rotation="10 MB",
-    retention="90 days",
-    compression="gz",
-    level="DEBUG"
-)
+try:
+    logger.add(
+        "logs/voxdocs.log",
+        rotation="10 MB",
+        retention="90 days",
+        compression="gz",
+        level="DEBUG"
+    )
+except PermissionError:
+    logger.warning("Could not create log file, logging to stdout only")
 
 
 @asynccontextmanager

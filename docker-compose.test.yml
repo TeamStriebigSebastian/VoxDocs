@@ -22,8 +22,8 @@ services:
       - WHISPER_DEVICE=cpu
       - BATCH_PROCESSING_HOUR=2
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - voxdocs-data:/app/data
+      - voxdocs-logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -40,3 +40,7 @@ services:
       - "3000:80"
     depends_on:
       - backend
+
+volumes:
+  voxdocs-data:
+  voxdocs-logs:

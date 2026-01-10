@@ -58,7 +58,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure directories exist
-for dir_path in [settings.DATA_DIR, settings.AUDIO_DIR, settings.ENCRYPTED_DIR,
-                 settings.EXPORT_DIR, settings.MODEL_DIR]:
-    dir_path.mkdir(parents=True, exist_ok=True)
+
+def ensure_directories():
+    """Ensure all required directories exist."""
+    for dir_path in [settings.DATA_DIR, settings.AUDIO_DIR, settings.ENCRYPTED_DIR,
+                     settings.EXPORT_DIR, settings.MODEL_DIR, Path("./logs")]:
+        try:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            pass  # Directory might already exist or be managed by Docker volume
