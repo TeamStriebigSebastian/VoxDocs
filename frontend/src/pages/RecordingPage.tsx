@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import RecordButton from '../components/RecordButton'
 import WaveformVisualizer from '../components/WaveformVisualizer'
@@ -6,35 +6,52 @@ import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { useAppStore } from '../stores/appStore'
 import { syncService } from '../services/syncService'
 
+interface UploadStatus {
+  id: string
+  duration: number
+  status: 'uploading' | 'success' | 'offline' | 'error'
+  uuid?: string
+  error?: string
+}
+
 export default function RecordingPage() {
   const navigate = useNavigate()
   const { practiceId, selectedRoomId, rooms, processImmediately } = useAppStore()
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [lastUpload, setLastUpload] = useState<{ uuid: string; duration: number; offline: boolean } | null>(null)
+  const [uploads, setUploads] = useState<UploadStatus[]>([])
+  const uploadIdCounter = useRef(0)
 
   const handleRecordingComplete = async (blob: Blob, duration: number) => {
-    setIsUploading(true)
-    setUploadError(null)
+    // Create a unique ID for this upload
+    const uploadId = `upload_${++uploadIdCounter.current}`
 
-    try {
-      const { success, offline, result } = await syncService.uploadRecording(
-        blob,
-        practiceId,
-        selectedRoomId || undefined,
-        processImmediately
-      )
+    // Add to uploads list immediately (non-blocking)
+    setUploads(prev => [...prev, { id: uploadId, duration, status: 'uploading' }])
 
+    // Upload in background - don't await, let it run async
+    syncService.uploadRecording(
+      blob,
+      practiceId,
+      selectedRoomId || undefined,
+      processImmediately
+    ).then(({ success, offline, result }) => {
       if (success) {
-        const uuid = offline ? (result as { offlineId: string }).offlineId : (result as { uuid: string }).uuid
-        setLastUpload({ uuid, duration, offline })
+        const uuid = offline
+          ? (result as { offlineId: string }).offlineId
+          : (result as { uuid: string }).uuid
+        setUploads(prev => prev.map(u =>
+          u.id === uploadId
+            ? { ...u, status: offline ? 'offline' : 'success', uuid }
+            : u
+        ))
       }
-    } catch (error) {
+    }).catch((error) => {
       console.error('Upload failed:', error)
-      setUploadError('Upload fehlgeschlagen. Bitte erneut versuchen.')
-    } finally {
-      setIsUploading(false)
-    }
+      setUploads(prev => prev.map(u =>
+        u.id === uploadId
+          ? { ...u, status: 'error', error: 'Upload fehlgeschlagen' }
+          : u
+      ))
+    })
   }
 
   const {
@@ -46,7 +63,7 @@ export default function RecordingPage() {
     error: recordingError,
   } = useAudioRecorder({
     onRecordingComplete: handleRecordingComplete,
-    onError: (err) => setUploadError(err.message),
+    onError: (err) => console.error('Recording error:', err),
   })
 
   const formatDuration = (seconds: number): string => {
@@ -56,6 +73,15 @@ export default function RecordingPage() {
   }
 
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId)
+
+  // Count uploads by status
+  const uploadingCount = uploads.filter(u => u.status === 'uploading').length
+  const successUploads = uploads.filter(u => u.status === 'success')
+  const lastSuccess = successUploads[successUploads.length - 1]
+
+  const clearUpload = (id: string) => {
+    setUploads(prev => prev.filter(u => u.id !== id))
+  }
 
   return (
     <div className="flex flex-col items-center space-y-8">
@@ -93,65 +119,68 @@ export default function RecordingPage() {
         )}
       </div>
 
-      {/* Record button */}
+      {/* Record button - NEVER disabled during upload */}
       <RecordButton
         isRecording={isRecording}
         onStart={startRecording}
         onStop={stopRecording}
-        disabled={isUploading}
+        disabled={false}
       />
 
-      {/* Status messages */}
-      {isUploading && (
-        <div className="flex items-center space-x-2 text-dental-600">
-          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+      {/* Upload status indicator (non-blocking) */}
+      {uploadingCount > 0 && (
+        <div className="flex items-center space-x-2 text-dental-600 text-sm">
+          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <span>Wird hochgeladen...</span>
-        </div>
-      )}
-
-      {uploadError && (
-        <div className="text-red-600 text-center p-4 bg-red-50 rounded-lg">
-          {uploadError}
+          <span>{uploadingCount} Upload{uploadingCount > 1 ? 's' : ''} läuft...</span>
         </div>
       )}
 
       {recordingError && (
-        <div className="text-red-600 text-center p-4 bg-red-50 rounded-lg">
+        <div className="text-red-600 text-center p-4 bg-red-50 rounded-lg w-full">
           {recordingError.message}
         </div>
       )}
 
-      {lastUpload && !isRecording && !isUploading && (
-        <div className={`w-full card ${lastUpload.offline ? 'border-yellow-300 bg-yellow-50' : ''}`}>
-          <h3 className="font-medium text-slate-800 mb-2">
-            {lastUpload.offline ? 'Aufnahme gespeichert (Offline)' : 'Letzte Aufnahme'}
-          </h3>
-          <p className="text-sm text-slate-600 mb-3">
-            Dauer: {formatDuration(lastUpload.duration)}
-          </p>
-          {lastUpload.offline ? (
-            <div className="text-sm text-yellow-700 mb-3">
-              Die Aufnahme wird automatisch hochgeladen, sobald eine Verbindung besteht.
+      {/* Show last successful upload */}
+      {lastSuccess && !isRecording && (
+        <div className="w-full card">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="font-medium text-slate-800 mb-1">Letzte Aufnahme</h3>
+              <p className="text-sm text-slate-600">
+                Dauer: {formatDuration(lastSuccess.duration)}
+              </p>
             </div>
-          ) : (
-            <div className="flex space-x-2">
-              <button
-                onClick={() => navigate(`/transcription/${lastUpload.uuid}`)}
-                className="btn btn-primary flex-1"
-              >
-                Transkription ansehen
-              </button>
-            </div>
-          )}
+            <button
+              onClick={() => clearUpload(lastSuccess.id)}
+              className="text-slate-400 hover:text-slate-600"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <button
-            onClick={() => setLastUpload(null)}
-            className={`btn ${lastUpload.offline ? 'btn-primary' : 'btn-secondary'} w-full mt-2`}
+            onClick={() => navigate(`/transcription/${lastSuccess.uuid}`)}
+            className="btn btn-primary w-full mt-3"
           >
-            {lastUpload.offline ? 'Weitere Aufnahme' : 'Schließen'}
+            Transkription ansehen
           </button>
+        </div>
+      )}
+
+      {/* Show offline uploads */}
+      {uploads.filter(u => u.status === 'offline').length > 0 && (
+        <div className="w-full card border-yellow-300 bg-yellow-50">
+          <h3 className="font-medium text-yellow-800 mb-2">
+            {uploads.filter(u => u.status === 'offline').length} Aufnahme(n) offline gespeichert
+          </h3>
+          <p className="text-sm text-yellow-700">
+            Werden automatisch hochgeladen sobald Verbindung besteht.
+          </p>
         </div>
       )}
 

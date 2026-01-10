@@ -2,7 +2,12 @@
 #
 # Starten mit: docker-compose -f docker-compose.test.yml up --build
 #
-# Dann im Browser: http://localhost:3000
+# Zugriff im Browser:
+#   - Lokal: https://localhost:3443 (Zertifikatswarnung akzeptieren)
+#   - WLAN/Handy: https://<DEINE-IP>:3443 (z.B. https://192.168.1.100:3443)
+#
+# WICHTIG: Für Mikrofon-Zugriff auf mobilen Geräten muss HTTPS verwendet werden!
+#          Das selbstsignierte Zertifikat muss im Browser akzeptiert werden.
 
 version: '3.8'
 
@@ -37,7 +42,8 @@ services:
       dockerfile: docker/Dockerfile.frontend
     container_name: voxdocs-frontend
     ports:
-      - "3000:80"
+      - "3000:80"    # HTTP (redirects to HTTPS)
+      - "3443:443"   # HTTPS (required for microphone on mobile)
     depends_on:
       - backend
 
