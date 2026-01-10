@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     SECRET_KEY: str = Field(default="change-me-in-production-use-strong-key")
 
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS - Allow local network access for testing
+    CORS_ORIGINS: List[str] = ["*"]  # Allow all origins for local network testing
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/voxdocs.db"

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '../stores/appStore'
 import { onboardingApi } from '../services/api'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
+import { syncService } from '../services/syncService'
 
 interface Category {
   category: string
@@ -24,6 +25,7 @@ export default function OnboardingPage() {
   const [progress, setProgress] = useState({ completed: 0, total: 0 })
   const [speakerName, setSpeakerName] = useState('')
   const [speakerNotes, setSpeakerNotes] = useState('')
+  const [offlineCount, setOfflineCount] = useState(0)
 
   const currentCategory = categories[currentCategoryIndex]
   const currentPhrase = currentCategory?.phrases[currentPhraseIndex]
@@ -32,7 +34,7 @@ export default function OnboardingPage() {
     if (!sessionId || !currentCategory || !currentPhrase) return
 
     try {
-      await onboardingApi.recordPhrase(
+      const { success, offline } = await syncService.uploadPhrase(
         sessionId,
         blob,
         currentCategory.category,
@@ -40,16 +42,22 @@ export default function OnboardingPage() {
         currentPhrase.phrase_text
       )
 
-      // Update local state
-      const updatedCategories = [...categories]
-      updatedCategories[currentCategoryIndex].phrases[currentPhraseIndex].is_recorded = true
-      updatedCategories[currentCategoryIndex].completed_phrases += 1
-      setCategories(updatedCategories)
+      if (success) {
+        // Update local state
+        const updatedCategories = [...categories]
+        updatedCategories[currentCategoryIndex].phrases[currentPhraseIndex].is_recorded = true
+        updatedCategories[currentCategoryIndex].completed_phrases += 1
+        setCategories(updatedCategories)
 
-      setProgress((prev) => ({ ...prev, completed: prev.completed + 1 }))
+        setProgress((prev) => ({ ...prev, completed: prev.completed + 1 }))
 
-      // Move to next phrase
-      moveToNext()
+        if (offline) {
+          setOfflineCount(prev => prev + 1)
+        }
+
+        // Move to next phrase
+        moveToNext()
+      }
     } catch (err) {
       console.error('Failed to save phrase recording:', err)
     }

@@ -4,22 +4,31 @@ import RecordButton from '../components/RecordButton'
 import WaveformVisualizer from '../components/WaveformVisualizer'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { useAppStore } from '../stores/appStore'
-import { audioApi } from '../services/api'
+import { syncService } from '../services/syncService'
 
 export default function RecordingPage() {
   const navigate = useNavigate()
   const { practiceId, selectedRoomId, rooms, processImmediately } = useAppStore()
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [lastUpload, setLastUpload] = useState<{ uuid: string; duration: number } | null>(null)
+  const [lastUpload, setLastUpload] = useState<{ uuid: string; duration: number; offline: boolean } | null>(null)
 
   const handleRecordingComplete = async (blob: Blob, duration: number) => {
     setIsUploading(true)
     setUploadError(null)
 
     try {
-      const result = await audioApi.upload(blob, practiceId, selectedRoomId || undefined, processImmediately)
-      setLastUpload({ uuid: result.uuid, duration })
+      const { success, offline, result } = await syncService.uploadRecording(
+        blob,
+        practiceId,
+        selectedRoomId || undefined,
+        processImmediately
+      )
+
+      if (success) {
+        const uuid = offline ? (result as { offlineId: string }).offlineId : (result as { uuid: string }).uuid
+        setLastUpload({ uuid, duration, offline })
+      }
     } catch (error) {
       console.error('Upload failed:', error)
       setUploadError('Upload fehlgeschlagen. Bitte erneut versuchen.')
@@ -116,25 +125,33 @@ export default function RecordingPage() {
       )}
 
       {lastUpload && !isRecording && !isUploading && (
-        <div className="w-full card">
-          <h3 className="font-medium text-slate-800 mb-2">Letzte Aufnahme</h3>
+        <div className={`w-full card ${lastUpload.offline ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+          <h3 className="font-medium text-slate-800 mb-2">
+            {lastUpload.offline ? 'Aufnahme gespeichert (Offline)' : 'Letzte Aufnahme'}
+          </h3>
           <p className="text-sm text-slate-600 mb-3">
             Dauer: {formatDuration(lastUpload.duration)}
           </p>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => navigate(`/transcription/${lastUpload.uuid}`)}
-              className="btn btn-primary flex-1"
-            >
-              Transkription ansehen
-            </button>
-            <button
-              onClick={() => setLastUpload(null)}
-              className="btn btn-secondary"
-            >
-              Schließen
-            </button>
-          </div>
+          {lastUpload.offline ? (
+            <div className="text-sm text-yellow-700 mb-3">
+              Die Aufnahme wird automatisch hochgeladen, sobald eine Verbindung besteht.
+            </div>
+          ) : (
+            <div className="flex space-x-2">
+              <button
+                onClick={() => navigate(`/transcription/${lastUpload.uuid}`)}
+                className="btn btn-primary flex-1"
+              >
+                Transkription ansehen
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setLastUpload(null)}
+            className={`btn ${lastUpload.offline ? 'btn-primary' : 'btn-secondary'} w-full mt-2`}
+          >
+            {lastUpload.offline ? 'Weitere Aufnahme' : 'Schließen'}
+          </button>
         </div>
       )}
 

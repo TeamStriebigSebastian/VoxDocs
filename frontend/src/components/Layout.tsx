@@ -1,6 +1,7 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import InstallButton from './InstallButton'
+import SyncStatus from './SyncStatus'
 
 interface LayoutProps {
   children: ReactNode
@@ -20,6 +21,8 @@ export default function Layout({ children }: LayoutProps) {
     <div className="min-h-screen flex flex-col bg-slate-50 safe-area-top safe-area-bottom">
       {/* PWA Install Banner */}
       <InstallButton />
+      {/* Sync Status Banner */}
+      <SyncStatus />
       {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
