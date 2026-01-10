@@ -103,9 +103,14 @@ export const classificationApi = {
 
 // Onboarding API
 export const onboardingApi = {
-  start: async (practiceId: number, userId: number) => {
+  start: async (practiceId: number, userId: number, speakerName?: string, speakerNotes?: string) => {
     const response = await api.post('/onboarding/start', null, {
-      params: { practice_id: practiceId, user_id: userId },
+      params: {
+        practice_id: practiceId,
+        user_id: userId,
+        speaker_name: speakerName,
+        speaker_notes: speakerNotes
+      },
     })
     return response.data
   },
@@ -144,6 +149,31 @@ export const onboardingApi = {
   getAllPhrases: async () => {
     const response = await api.get('/onboarding/phrases/all')
     return response.data
+  },
+
+  updateSpeaker: async (sessionId: number, speakerName?: string, speakerNotes?: string) => {
+    const response = await api.patch(`/onboarding/${sessionId}/speaker`, null, {
+      params: { speaker_name: speakerName, speaker_notes: speakerNotes },
+    })
+    return response.data
+  },
+
+  listSessions: async (practiceId?: number) => {
+    const response = await api.get('/onboarding/sessions/list', {
+      params: practiceId ? { practice_id: practiceId } : {},
+    })
+    return response.data
+  },
+
+  exportSession: (sessionId: number) => {
+    // Return URL for direct download
+    return `${api.defaults.baseURL}/onboarding/${sessionId}/export`
+  },
+
+  exportAll: (practiceId?: number) => {
+    // Return URL for direct download
+    const params = practiceId ? `?practice_id=${practiceId}` : ''
+    return `${api.defaults.baseURL}/onboarding/export/all${params}`
   },
 }
 

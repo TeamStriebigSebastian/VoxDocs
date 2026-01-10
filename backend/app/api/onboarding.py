@@ -4,7 +4,15 @@ Onboarding API endpoints for phrase recording.
 
 from datetime import datetime
 from typing import Optional, List
+from pathlib import Path
+import csv
+import io
+import json
+import zipfile
+import tempfile
+import shutil
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -120,6 +128,7 @@ class OnboardingSessionResponse(BaseModel):
     current_category: Optional[str]
     progress_percentage: float
     started_at: Optional[datetime]
+    speaker_name: Optional[str] = None
 
 
 class PhraseResponse(BaseModel):
@@ -142,6 +151,8 @@ class CategoryProgressResponse(BaseModel):
 async def start_onboarding(
     practice_id: int,
     user_id: int,
+    speaker_name: Optional[str] = None,
+    speaker_notes: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Start a new onboarding session."""
@@ -152,6 +163,8 @@ async def start_onboarding(
     session = OnboardingSession(
         practice_id=practice_id,
         user_id=user_id,
+        speaker_name=speaker_name,
+        speaker_notes=speaker_notes,
         status=OnboardingStatus.IN_PROGRESS,
         started_at=datetime.utcnow(),
         total_phrases=total_phrases,
@@ -171,7 +184,8 @@ async def start_onboarding(
         completed_phrases=0,
         current_category=session.current_category.value if session.current_category else None,
         progress_percentage=0.0,
-        started_at=session.started_at
+        started_at=session.started_at,
+        speaker_name=session.speaker_name
     )
 
 
@@ -200,7 +214,8 @@ async def get_session_status(
         completed_phrases=session.completed_phrases,
         current_category=session.current_category.value if session.current_category else None,
         progress_percentage=progress,
-        started_at=session.started_at
+        started_at=session.started_at,
+        speaker_name=session.speaker_name
     )
 
 
@@ -363,3 +378,324 @@ def _get_category_name(category: PhraseCategory) -> str:
         PhraseCategory.SENTENCE: "Satzkombinationen",
     }
     return names.get(category, category.value)
+
+
+@router.patch("/{session_id}/speaker")
+async def update_speaker_info(
+    session_id: int,
+    speaker_name: Optional[str] = None,
+    speaker_notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update speaker information for an onboarding session."""
+    result = await db.execute(
+        select(OnboardingSession).where(OnboardingSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if speaker_name is not None:
+        session.speaker_name = speaker_name
+    if speaker_notes is not None:
+        session.speaker_notes = speaker_notes
+
+    await db.commit()
+    await db.refresh(session)
+
+    return {
+        "status": "updated",
+        "session_id": session_id,
+        "speaker_name": session.speaker_name,
+        "speaker_notes": session.speaker_notes
+    }
+
+
+@router.get("/sessions/list")
+async def list_sessions(
+    practice_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all onboarding sessions with their recording counts."""
+    query = select(OnboardingSession).options(selectinload(OnboardingSession.phrase_recordings))
+    if practice_id:
+        query = query.where(OnboardingSession.practice_id == practice_id)
+
+    result = await db.execute(query.order_by(OnboardingSession.created_at.desc()))
+    sessions = result.scalars().all()
+
+    return [
+        {
+            "id": s.id,
+            "practice_id": s.practice_id,
+            "user_id": s.user_id,
+            "speaker_name": s.speaker_name,
+            "speaker_notes": s.speaker_notes,
+            "status": s.status.value,
+            "total_phrases": s.total_phrases,
+            "completed_phrases": s.completed_phrases,
+            "started_at": s.started_at,
+            "completed_at": s.completed_at,
+            "created_at": s.created_at
+        }
+        for s in sessions
+    ]
+
+
+@router.get("/{session_id}/export")
+async def export_training_data(
+    session_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Export training data for Whisper fine-tuning.
+
+    Returns a ZIP file containing:
+    - All decrypted WAV audio files
+    - manifest.csv with columns: filename, phrase_text, category, speaker_name, duration_seconds
+    - metadata.json with session information
+    """
+    result = await db.execute(
+        select(OnboardingSession)
+        .options(selectinload(OnboardingSession.phrase_recordings))
+        .where(OnboardingSession.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session.phrase_recordings:
+        raise HTTPException(status_code=400, detail="No recordings found for this session")
+
+    # Create temporary directory for export
+    temp_dir = Path(tempfile.mkdtemp())
+    audio_dir = temp_dir / "audio"
+    audio_dir.mkdir()
+
+    try:
+        # Export manifest data
+        manifest_rows = []
+
+        for recording in session.phrase_recordings:
+            if not recording.encrypted_filename:
+                continue
+
+            encrypted_path = settings.ENCRYPTED_DIR / recording.encrypted_filename
+            if not encrypted_path.exists():
+                logger.warning(f"Encrypted file not found: {encrypted_path}")
+                continue
+
+            # Generate output filename
+            safe_category = recording.category.value.replace(" ", "_")
+            output_filename = f"{safe_category}_{recording.phrase_index:03d}.wav"
+            output_path = audio_dir / output_filename
+
+            # Decrypt file
+            try:
+                encryption_service.decrypt_file(encrypted_path, output_path)
+            except Exception as e:
+                logger.error(f"Failed to decrypt {encrypted_path}: {e}")
+                continue
+
+            manifest_rows.append({
+                "filename": f"audio/{output_filename}",
+                "phrase_text": recording.phrase_text,
+                "category": recording.category.value,
+                "category_name": _get_category_name(recording.category),
+                "phrase_index": recording.phrase_index,
+                "speaker_name": session.speaker_name or "unknown",
+                "duration_seconds": recording.duration_seconds or 0,
+                "recorded_at": recording.recorded_at.isoformat() if recording.recorded_at else ""
+            })
+
+        if not manifest_rows:
+            raise HTTPException(status_code=400, detail="No valid recordings could be exported")
+
+        # Write manifest CSV
+        manifest_path = temp_dir / "manifest.csv"
+        with open(manifest_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "filename", "phrase_text", "category", "category_name",
+                "phrase_index", "speaker_name", "duration_seconds", "recorded_at"
+            ])
+            writer.writeheader()
+            writer.writerows(manifest_rows)
+
+        # Write metadata JSON
+        metadata = {
+            "session_id": session.id,
+            "practice_id": session.practice_id,
+            "user_id": session.user_id,
+            "speaker_name": session.speaker_name,
+            "speaker_notes": session.speaker_notes,
+            "status": session.status.value,
+            "total_phrases": session.total_phrases,
+            "completed_phrases": session.completed_phrases,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "export_timestamp": datetime.utcnow().isoformat(),
+            "recording_count": len(manifest_rows)
+        }
+        metadata_path = temp_dir / "metadata.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Add manifest
+            zf.write(manifest_path, "manifest.csv")
+            # Add metadata
+            zf.write(metadata_path, "metadata.json")
+            # Add all audio files
+            for audio_file in audio_dir.iterdir():
+                zf.write(audio_file, f"audio/{audio_file.name}")
+
+        zip_buffer.seek(0)
+
+        # Create filename for download
+        speaker_part = f"_{session.speaker_name}" if session.speaker_name else ""
+        download_filename = f"voxdocs_training_session_{session_id}{speaker_part}.zip"
+
+        logger.info(f"Exported {len(manifest_rows)} recordings for session {session_id}")
+
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_filename}"'
+            }
+        )
+
+    finally:
+        # Cleanup temporary directory
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@router.get("/export/all")
+async def export_all_training_data(
+    practice_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Export all training data from all sessions for Whisper fine-tuning.
+
+    Returns a ZIP file containing all recordings from all completed sessions.
+    """
+    query = select(OnboardingSession).options(
+        selectinload(OnboardingSession.phrase_recordings)
+    ).where(OnboardingSession.status == OnboardingStatus.COMPLETED)
+
+    if practice_id:
+        query = query.where(OnboardingSession.practice_id == practice_id)
+
+    result = await db.execute(query)
+    sessions = result.scalars().all()
+
+    if not sessions:
+        raise HTTPException(status_code=404, detail="No completed sessions found")
+
+    # Create temporary directory for export
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        all_manifest_rows = []
+
+        for session in sessions:
+            speaker_name = session.speaker_name or f"speaker_{session.id}"
+            speaker_dir = temp_dir / speaker_name
+            speaker_dir.mkdir(exist_ok=True)
+
+            for recording in session.phrase_recordings:
+                if not recording.encrypted_filename:
+                    continue
+
+                encrypted_path = settings.ENCRYPTED_DIR / recording.encrypted_filename
+                if not encrypted_path.exists():
+                    continue
+
+                # Generate output filename
+                safe_category = recording.category.value.replace(" ", "_")
+                output_filename = f"{safe_category}_{recording.phrase_index:03d}.wav"
+                output_path = speaker_dir / output_filename
+
+                # Decrypt file
+                try:
+                    encryption_service.decrypt_file(encrypted_path, output_path)
+                except Exception as e:
+                    logger.error(f"Failed to decrypt {encrypted_path}: {e}")
+                    continue
+
+                all_manifest_rows.append({
+                    "filename": f"{speaker_name}/{output_filename}",
+                    "phrase_text": recording.phrase_text,
+                    "category": recording.category.value,
+                    "category_name": _get_category_name(recording.category),
+                    "phrase_index": recording.phrase_index,
+                    "speaker_name": speaker_name,
+                    "session_id": session.id,
+                    "duration_seconds": recording.duration_seconds or 0,
+                    "recorded_at": recording.recorded_at.isoformat() if recording.recorded_at else ""
+                })
+
+        if not all_manifest_rows:
+            raise HTTPException(status_code=400, detail="No valid recordings could be exported")
+
+        # Write combined manifest CSV
+        manifest_path = temp_dir / "manifest.csv"
+        with open(manifest_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "filename", "phrase_text", "category", "category_name",
+                "phrase_index", "speaker_name", "session_id", "duration_seconds", "recorded_at"
+            ])
+            writer.writeheader()
+            writer.writerows(all_manifest_rows)
+
+        # Write metadata JSON
+        metadata = {
+            "export_timestamp": datetime.utcnow().isoformat(),
+            "total_sessions": len(sessions),
+            "total_recordings": len(all_manifest_rows),
+            "speakers": list(set(row["speaker_name"] for row in all_manifest_rows)),
+            "sessions": [
+                {
+                    "id": s.id,
+                    "speaker_name": s.speaker_name,
+                    "completed_phrases": s.completed_phrases
+                }
+                for s in sessions
+            ]
+        }
+        metadata_path = temp_dir / "metadata.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.write(manifest_path, "manifest.csv")
+            zf.write(metadata_path, "metadata.json")
+            # Add all speaker directories
+            for speaker_dir in temp_dir.iterdir():
+                if speaker_dir.is_dir():
+                    for audio_file in speaker_dir.iterdir():
+                        zf.write(audio_file, f"{speaker_dir.name}/{audio_file.name}")
+
+        zip_buffer.seek(0)
+
+        download_filename = f"voxdocs_training_all_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+
+        logger.info(f"Exported {len(all_manifest_rows)} recordings from {len(sessions)} sessions")
+
+        return StreamingResponse(
+            zip_buffer,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_filename}"'
+            }
+        )
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

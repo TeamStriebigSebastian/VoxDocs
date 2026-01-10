@@ -40,6 +40,10 @@ class OnboardingSession(Base):
     practice_id = Column(Integer, ForeignKey("practices.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
+    # Speaker information for training data
+    speaker_name = Column(String(255))  # Name/identifier of the person recording
+    speaker_notes = Column(Text)  # Optional notes about the speaker
+
     # Session status
     status = Column(Enum(OnboardingStatus), default=OnboardingStatus.NOT_STARTED)
     started_at = Column(DateTime)

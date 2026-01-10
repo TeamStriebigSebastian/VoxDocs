@@ -46,3 +46,8 @@ async def get_db() -> AsyncSession:
             raise
         finally:
             await session.close()
+
+
+def get_db_session() -> AsyncSession:
+    """Get a new database session (non-generator version for background tasks)."""
+    return async_session_maker()

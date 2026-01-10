@@ -85,13 +85,15 @@ export default function SettingsPage() {
           </div>
           <button
             onClick={() => setProcessImmediately(!processImmediately)}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
+            className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${
               processImmediately ? 'bg-dental-600' : 'bg-slate-300'
             }`}
+            role="switch"
+            aria-checked={processImmediately}
           >
             <span
-              className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                processImmediately ? 'translate-x-7' : 'translate-x-1'
+              className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${
+                processImmediately ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
           </button>

@@ -22,6 +22,8 @@ export default function OnboardingPage() {
   const [currentPhraseIndex, setCurrentPhraseIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [progress, setProgress] = useState({ completed: 0, total: 0 })
+  const [speakerName, setSpeakerName] = useState('')
+  const [speakerNotes, setSpeakerNotes] = useState('')
 
   const currentCategory = categories[currentCategoryIndex]
   const currentPhrase = currentCategory?.phrases[currentPhraseIndex]
@@ -62,7 +64,12 @@ export default function OnboardingPage() {
 
     setIsLoading(true)
     try {
-      const session = await onboardingApi.start(practiceId, userId)
+      const session = await onboardingApi.start(
+        practiceId,
+        userId,
+        speakerName || undefined,
+        speakerNotes || undefined
+      )
       setSessionId(session.id)
 
       const phrasesData = await onboardingApi.getPhrases(session.id)
@@ -76,6 +83,12 @@ export default function OnboardingPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const downloadExport = () => {
+    if (!sessionId) return
+    const exportUrl = onboardingApi.exportSession(sessionId)
+    window.open(exportUrl, '_blank')
   }
 
   const moveToNext = () => {
@@ -122,22 +135,65 @@ export default function OnboardingPage() {
 
   if (!sessionId) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-slate-800 mb-4">Sprachtraining</h2>
-        <p className="text-slate-600 mb-6 max-w-md mx-auto">
-          Trainieren Sie das System mit Ihrer Stimme. Sprechen Sie ca. 200-250 zahnmedizinische
-          Begriffe und Phrasen für optimale Erkennungsleistung.
-        </p>
-        <div className="text-sm text-slate-500 mb-8">
-          <p>Geschätzte Dauer: 10-15 Minuten</p>
+      <div className="py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">Sprachtraining</h2>
+          <p className="text-slate-600 mb-6 max-w-md mx-auto">
+            Trainieren Sie das System mit Ihrer Stimme. Sprechen Sie ca. 200-250 zahnmedizinische
+            Begriffe und Phrasen für optimale Erkennungsleistung.
+          </p>
+          <div className="text-sm text-slate-500 mb-4">
+            <p>Geschätzte Dauer: 10-15 Minuten</p>
+          </div>
         </div>
+
+        {/* Speaker info form */}
+        <div className="card mb-6">
+          <h3 className="font-medium text-slate-800 mb-4">Sprecher-Informationen</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">
+                Name / Kennung *
+              </label>
+              <input
+                type="text"
+                value={speakerName}
+                onChange={(e) => setSpeakerName(e.target.value)}
+                placeholder="z.B. Dr. Müller, Assistenz Anna"
+                className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-dental-500 focus:border-dental-500"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Wird für die Trainingsdaten verwendet
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">
+                Notizen (optional)
+              </label>
+              <textarea
+                value={speakerNotes}
+                onChange={(e) => setSpeakerNotes(e.target.value)}
+                placeholder="z.B. Dialekt, Mikrofon-Setup, etc."
+                rows={2}
+                className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-dental-500 focus:border-dental-500"
+              />
+            </div>
+          </div>
+        </div>
+
         <button
           onClick={startSession}
-          disabled={isLoading}
-          className="btn btn-primary text-lg px-8 py-3"
+          disabled={isLoading || !speakerName.trim()}
+          className="btn btn-primary text-lg px-8 py-3 w-full"
         >
           {isLoading ? 'Wird gestartet...' : 'Training starten'}
         </button>
+
+        {!speakerName.trim() && (
+          <p className="text-sm text-slate-500 text-center mt-2">
+            Bitte geben Sie einen Namen ein
+          </p>
+        )}
       </div>
     )
   }
@@ -152,9 +208,39 @@ export default function OnboardingPage() {
         </div>
         <h2 className="text-2xl font-bold text-slate-800 mb-4">Training abgeschlossen!</h2>
         <p className="text-slate-600 mb-6">
-          Vielen Dank! Sie haben alle {progress.total} Phrasen aufgenommen.
-          Das System wird mit Ihren Aufnahmen trainiert.
+          Vielen Dank{speakerName ? `, ${speakerName}` : ''}! Sie haben alle {progress.total} Phrasen aufgenommen.
         </p>
+
+        {/* Export section */}
+        <div className="card text-left mb-6">
+          <h3 className="font-medium text-slate-800 mb-3">Trainingsdaten exportieren</h3>
+          <p className="text-sm text-slate-600 mb-4">
+            Laden Sie die Aufnahmen als ZIP-Datei herunter, um Whisper damit zu trainieren.
+            Enthält alle Audio-Dateien und eine manifest.csv mit Metadaten.
+          </p>
+          <button
+            onClick={downloadExport}
+            className="btn btn-primary w-full flex items-center justify-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Trainingsdaten herunterladen</span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => {
+            setSessionId(null)
+            setCategories([])
+            setProgress({ completed: 0, total: 0 })
+            setSpeakerName('')
+            setSpeakerNotes('')
+          }}
+          className="btn btn-secondary"
+        >
+          Neues Training starten
+        </button>
       </div>
     )
   }

@@ -15,8 +15,14 @@ from app.core.config import settings, ensure_directories
 ensure_directories()
 
 from app.api import audio, transcription, classification, health, onboarding, export
-from app.core.database import init_db
-from app.services.queue_service import queue_service
+from app.core.database import init_db, get_db_session
+from app.services.queue_service import queue_service, QueueJob
+from app.services.whisper_service import whisper_service
+from app.services.encryption_service import encryption_service
+from app.models.audio import AudioRecording
+from app.models.transcription import Transcription, TranscriptionSegment
+from sqlalchemy import select
+from datetime import datetime
 
 
 # Configure logging
@@ -38,12 +44,105 @@ except PermissionError:
     logger.warning("Could not create log file, logging to stdout only")
 
 
+async def process_transcription_job(job: QueueJob) -> dict:
+    """
+    Process a transcription job from the queue.
+    This function is called by the queue service to process pending jobs.
+    """
+    logger.info(f"Processing job {job.id} for recording {job.recording_id}")
+
+    async with get_db_session() as db:
+        try:
+            # Get the recording
+            result = await db.execute(
+                select(AudioRecording).where(AudioRecording.id == job.recording_id)
+            )
+            recording = result.scalar_one_or_none()
+
+            if not recording:
+                raise Exception(f"Recording {job.recording_id} not found")
+
+            # Decrypt the audio file
+            encrypted_path = settings.ENCRYPTED_DIR / recording.encrypted_filename
+            if not encrypted_path.exists():
+                raise Exception(f"Encrypted file not found: {encrypted_path}")
+
+            # Decrypt to temporary file
+            decrypted_path = encryption_service.decrypt_file(encrypted_path)
+
+            try:
+                # Transcribe using Whisper with dental vocabulary boost
+                transcription_result = whisper_service.transcribe_with_dental_boost(decrypted_path)
+
+                # Update recording duration
+                if transcription_result.segments:
+                    recording.duration_seconds = transcription_result.segments[-1]["end"]
+
+                # Create transcription record
+                transcription = Transcription(
+                    recording_id=recording.id,
+                    full_text=transcription_result.text,
+                    language=transcription_result.language,
+                    whisper_model=settings.WHISPER_MODEL,
+                    processing_time_seconds=transcription_result.processing_time,
+                    confidence_score=transcription_result.confidence
+                )
+                db.add(transcription)
+                await db.flush()
+
+                # Create segments
+                for seg in transcription_result.segments:
+                    segment = TranscriptionSegment(
+                        transcription_id=transcription.id,
+                        text=seg["text"],
+                        start_time=seg["start"],
+                        end_time=seg["end"],
+                        confidence=seg["confidence"],
+                        word_timestamps=seg.get("words")
+                    )
+                    db.add(segment)
+
+                # Update recording status
+                recording.status = "completed"
+                recording.processing_started_at = job.started_at
+                recording.processing_completed_at = datetime.utcnow()
+
+                await db.commit()
+
+                logger.info(f"Transcription completed for job {job.id}")
+
+                return {
+                    "transcription_id": transcription.id,
+                    "text_preview": transcription_result.text[:200] if transcription_result.text else "",
+                    "processing_time": transcription_result.processing_time
+                }
+
+            finally:
+                # Clean up decrypted file
+                if decrypted_path.exists():
+                    decrypted_path.unlink()
+
+        except Exception as e:
+            logger.error(f"Job {job.id} failed: {e}")
+            # Update recording status to failed
+            if recording:
+                recording.status = "failed"
+                recording.error_message = str(e)
+                await db.commit()
+            raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("Starting VoxDocs Dental Speech-to-Text System...")
     await init_db()
+
+    # Register the transcription processor with the queue service
+    queue_service.set_processor(process_transcription_job)
+    logger.info("Transcription processor registered")
+
     await queue_service.start()
     logger.info("VoxDocs started successfully")
 
