@@ -53,7 +53,7 @@ frontend/dist/
 
 # Local data and secrets
 data/
-models/
+/models/
 logs/
 *.db
 *.sqlite
