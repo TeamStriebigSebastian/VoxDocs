@@ -4,6 +4,7 @@ Transcription API endpoints.
 
 from datetime import datetime
 from typing import Optional, List
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,7 +126,11 @@ async def process_transcription(
         decrypted_path = encryption_service.decrypt_file(encrypted_path)
 
         # Transcribe using Whisper with dental vocabulary boost
-        transcription_result = whisper_service.transcribe_with_dental_boost(decrypted_path)
+        # Run in thread pool to avoid blocking the event loop
+        transcription_result = await asyncio.to_thread(
+            whisper_service.transcribe_with_dental_boost,
+            decrypted_path
+        )
 
         # Clean up decrypted file
         decrypted_path.unlink()

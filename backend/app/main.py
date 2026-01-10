@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 import sys
+import asyncio
 
 from app.core.config import settings, ensure_directories
 
@@ -72,7 +73,11 @@ async def process_transcription_job(job: QueueJob) -> dict:
 
             try:
                 # Transcribe using Whisper with dental vocabulary boost
-                transcription_result = whisper_service.transcribe_with_dental_boost(decrypted_path)
+                # Run in thread pool to avoid blocking the event loop
+                transcription_result = await asyncio.to_thread(
+                    whisper_service.transcribe_with_dental_boost,
+                    decrypted_path
+                )
 
                 # Update recording duration
                 if transcription_result.segments:
