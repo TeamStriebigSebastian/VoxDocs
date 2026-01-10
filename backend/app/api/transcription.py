@@ -101,7 +101,9 @@ async def process_transcription(
     Useful for testing or immediate processing needs.
     """
     result = await db.execute(
-        select(AudioRecording).where(AudioRecording.uuid == recording_uuid)
+        select(AudioRecording)
+        .options(selectinload(AudioRecording.transcription))
+        .where(AudioRecording.uuid == recording_uuid)
     )
     recording = result.scalar_one_or_none()
 
