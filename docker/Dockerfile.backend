@@ -8,19 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for audio processing and PyAV (faster-whisper)
+# Install system dependencies for audio processing
+# Note: We use pre-built PyAV wheels which bundle their own FFmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     build-essential \
     curl \
-    pkg-config \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libswscale-dev \
-    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -33,7 +27,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 
 # Install Python dependencies
+# Install av separately with --only-binary to use pre-built wheel with bundled FFmpeg
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --only-binary av av && \
     pip install --no-cache-dir -r requirements.txt
 
 # Pre-download faster-whisper model to avoid runtime download
