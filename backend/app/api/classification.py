@@ -1,5 +1,6 @@
 """
 Classification API endpoints.
+Uses LLM-generated classifications stored during transcription processing.
 """
 
 from typing import Optional, List
@@ -9,25 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from loguru import logger
+from datetime import datetime
 
 from app.core.database import get_db
 from app.models.audio import AudioRecording
 from app.models.transcription import Transcription
-from app.models.classification import Classification, ClassificationCategory, CategoryType
-from app.services.classification_service import classifier, ClassificationResult
+from app.models.classification import Classification
 
 router = APIRouter()
 
 
 class ClassificationItemResponse(BaseModel):
     """Response model for a single classification."""
-    id: Optional[int]
+    id: int
     category: str
-    extracted_text: str
-    normalized_value: Optional[str]
+    text: str
     confidence: float
-    tooth_number: Optional[str]
-    surface: Optional[str]
     is_verified: bool = False
 
 
@@ -36,12 +34,7 @@ class ClassificationResponse(BaseModel):
     recording_uuid: str
     total_entities: int
     classifications: List[ClassificationItemResponse]
-    summary: dict
-
-
-class ClassifyTextRequest(BaseModel):
-    """Request model for classifying arbitrary text."""
-    text: str
+    llm_processed: bool
 
 
 @router.get("/{recording_uuid}", response_model=ClassificationResponse)
@@ -49,7 +42,7 @@ async def get_classifications(
     recording_uuid: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get classifications for a recording's transcription."""
+    """Get LLM-generated classifications for a recording's transcription."""
     result = await db.execute(
         select(AudioRecording)
         .options(
@@ -68,93 +61,20 @@ async def get_classifications(
 
     transcription = recording.transcription
 
-    # If no classifications exist yet, run classification
-    if not transcription.classifications:
-        classifications_result = classifier.classify(transcription.full_text)
-
-        # Save classifications to database
-        for cr in classifications_result:
-            classification = Classification(
-                transcription_id=transcription.id,
-                category_id=1,  # Would need proper category lookup
-                extracted_text=cr.extracted_text,
-                normalized_value=cr.normalized_value,
-                start_position=cr.start_position,
-                end_position=cr.end_position,
-                tooth_number=cr.tooth_number,
-                surface=cr.surface,
-                confidence_score=cr.confidence
-            )
-            db.add(classification)
-
-        await db.commit()
-        await db.refresh(transcription)
-
-        classifications = classifications_result
-    else:
-        # Convert database records to response format
-        classifications = [
-            ClassificationResult(
-                category=CategoryType(c.category.type.value) if c.category else CategoryType.OTHER,
-                extracted_text=c.extracted_text,
-                normalized_value=c.normalized_value,
-                confidence=c.confidence_score,
-                start_position=c.start_position or 0,
-                end_position=c.end_position or 0,
-                tooth_number=c.tooth_number,
-                surface=c.surface
-            )
-            for c in transcription.classifications
-        ]
-
-    # Generate summary
-    summary = classifier.get_summary(classifications)
-
     return ClassificationResponse(
         recording_uuid=recording_uuid,
-        total_entities=len(classifications),
+        total_entities=len(transcription.classifications),
         classifications=[
             ClassificationItemResponse(
-                id=None,
-                category=c.category.value,
-                extracted_text=c.extracted_text,
-                normalized_value=c.normalized_value,
+                id=c.id,
+                category=c.category,
+                text=c.text,
                 confidence=c.confidence,
-                tooth_number=c.tooth_number,
-                surface=c.surface,
-                is_verified=False
+                is_verified=c.is_verified
             )
-            for c in classifications
+            for c in transcription.classifications
         ],
-        summary=summary
-    )
-
-
-@router.post("/classify-text", response_model=ClassificationResponse)
-async def classify_text(request: ClassifyTextRequest):
-    """
-    Classify arbitrary dental text without storing.
-    Useful for testing and preview.
-    """
-    classifications = classifier.classify(request.text)
-    summary = classifier.get_summary(classifications)
-
-    return ClassificationResponse(
-        recording_uuid="preview",
-        total_entities=len(classifications),
-        classifications=[
-            ClassificationItemResponse(
-                id=None,
-                category=c.category.value,
-                extracted_text=c.extracted_text,
-                normalized_value=c.normalized_value,
-                confidence=c.confidence,
-                tooth_number=c.tooth_number,
-                surface=c.surface
-            )
-            for c in classifications
-        ],
-        summary=summary
+        llm_processed=transcription.llm_processed is not None
     )
 
 
@@ -162,10 +82,9 @@ async def classify_text(request: ClassifyTextRequest):
 async def verify_classification(
     recording_uuid: str,
     classification_id: int,
-    user_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """Verify a classification as correct."""
+    """Verify a classification as correct (for training feedback)."""
     result = await db.execute(
         select(Classification).where(Classification.id == classification_id)
     )
@@ -175,8 +94,6 @@ async def verify_classification(
         raise HTTPException(status_code=404, detail="Classification not found")
 
     classification.is_verified = True
-    classification.verified_by_user_id = user_id
-    from datetime import datetime
     classification.verified_at = datetime.utcnow()
 
     await db.commit()
@@ -186,26 +103,13 @@ async def verify_classification(
 
 @router.get("/categories")
 async def get_categories():
-    """Get all classification categories."""
+    """Get all classification categories used by LLM."""
     return {
         "categories": [
-            {"type": ct.value, "name": ct.name, "description": _get_category_description(ct)}
-            for ct in CategoryType
+            {"type": "befund", "name": "Befund", "description": "Klinische Befunde und Diagnosen"},
+            {"type": "behandlung", "name": "Behandlung", "description": "Durchgeführte Behandlungsschritte"},
+            {"type": "planung", "name": "Planung", "description": "Geplante Maßnahmen und Empfehlungen"},
+            {"type": "anamnese", "name": "Anamnese", "description": "Patienteninformationen und Vorgeschichte"},
+            {"type": "aufgabe", "name": "Aufgabe", "description": "Aufgaben für den nächsten Termin"},
         ]
     }
-
-
-def _get_category_description(category_type: CategoryType) -> str:
-    """Get German description for a category type."""
-    descriptions = {
-        CategoryType.FINDING: "Befunde (z.B. Lockerungsgrad, Taschentiefe)",
-        CategoryType.DIAGNOSIS: "Diagnosen (z.B. Karies, Parodontitis)",
-        CategoryType.TREATMENT: "Behandlungsschritte (z.B. Wurzelkanalbehandlung)",
-        CategoryType.MATERIAL: "Materialien (z.B. Composite, Amalgam)",
-        CategoryType.INSTRUMENT: "Instrumente (z.B. Rosenbohrer, Scaler)",
-        CategoryType.ANATOMY: "Anatomische Begriffe (z.B. Pulpa, Gingiva)",
-        CategoryType.TOOTH: "Zahnbezeichnungen (FDI-Schema)",
-        CategoryType.SURFACE: "Flächenbeschreibungen (z.B. mesial, distal)",
-        CategoryType.OTHER: "Sonstige Begriffe",
-    }
-    return descriptions.get(category_type, "")

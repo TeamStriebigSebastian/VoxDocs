@@ -18,7 +18,6 @@ from app.models.transcription import Transcription, TranscriptionSegment
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.services.encryption_service import encryption_service
 from app.services.whisper_service import whisper_service
-from app.services.classification_service import classifier
 from app.core.config import settings
 
 router = APIRouter()
