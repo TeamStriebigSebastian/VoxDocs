@@ -19,6 +19,7 @@ interface AppState {
 
   // Recording settings
   processImmediately: boolean
+  pushToTalk: boolean  // PTT mode: hold to record
 
   // Actions
   setPractice: (id: number, name: string) => void
@@ -26,6 +27,7 @@ interface AppState {
   setSelectedRoom: (roomId: number | null) => void
   setUser: (id: number, name: string) => void
   setProcessImmediately: (value: boolean) => void
+  setPushToTalk: (value: boolean) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -43,6 +45,7 @@ export const useAppStore = create<AppState>()(
       userId: 1,
       userName: 'Dr. Demo',
       processImmediately: false,
+      pushToTalk: false,  // Default: toggle mode (click to start/stop)
 
       // Actions
       setPractice: (id, name) => set({ practiceId: id, practiceName: name }),
@@ -50,6 +53,7 @@ export const useAppStore = create<AppState>()(
       setSelectedRoom: (roomId) => set({ selectedRoomId: roomId }),
       setUser: (id, name) => set({ userId: id, userName: name }),
       setProcessImmediately: (value) => set({ processImmediately: value }),
+      setPushToTalk: (value) => set({ pushToTalk: value }),
     }),
     {
       name: 'voxdocs-storage',
