@@ -1,20 +1,27 @@
 # VoxDocs Backend Dockerfile
 # GDPR-compliant Dental Speech-to-Text System
 
-FROM python:3.11-slim
+# Use Bullseye (Debian 11) which has FFmpeg 4.x compatible with PyAV 11
+FROM python:3.11-slim-bullseye
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for audio processing
-# Note: We use pre-built PyAV wheels which bundle their own FFmpeg
+# Install system dependencies for audio processing and PyAV build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     build-essential \
     curl \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -27,9 +34,7 @@ WORKDIR /app
 COPY backend/requirements.txt .
 
 # Install Python dependencies
-# Install av separately with --only-binary to use pre-built wheel with bundled FFmpeg
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --only-binary av av && \
     pip install --no-cache-dir -r requirements.txt
 
 # Pre-download faster-whisper model to avoid runtime download
