@@ -69,11 +69,12 @@ class LLMService:
             return self._ollama_available
 
         try:
-            import ollama
+            from ollama import Client
             # Try to list models to verify connection
-            ollama.list()
+            client = Client(host=settings.OLLAMA_HOST)
+            client.list()
             self._ollama_available = True
-            logger.info("Ollama is available")
+            logger.info(f"Ollama is available at {settings.OLLAMA_HOST}")
         except Exception as e:
             logger.warning(f"Ollama not available: {e}")
             self._ollama_available = False
@@ -141,11 +142,13 @@ Antworte im JSON-Format wie im System-Prompt beschrieben."""
 
     async def _call_ollama(self, prompt: str, model: str) -> str:
         """Call Ollama API."""
-        import ollama
+        from ollama import Client
         import asyncio
 
         def _sync_call():
-            response = ollama.chat(
+            # Use Client with explicit host from settings
+            client = Client(host=settings.OLLAMA_HOST)
+            response = client.chat(
                 model=model,
                 messages=[
                     {"role": "system", "content": DENTAL_SYSTEM_PROMPT},
