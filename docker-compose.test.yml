@@ -23,8 +23,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama-models:/root/.ollama
-    # Pull the model on startup
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull llama3.2 && wait"]
+    # Pull qwen2.5:3b on startup - good German support
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull qwen2.5:3b && wait"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -47,7 +47,7 @@ services:
       - WHISPER_DEVICE=cpu
       - BATCH_PROCESSING_HOUR=2
       - LLM_PROVIDER=ollama
-      - LLM_MODEL=llama3.2
+      - LLM_MODEL=qwen2.5:3b
       - OLLAMA_HOST=http://ollama:11434
       - USE_LLM_CORRECTION=true
     volumes:

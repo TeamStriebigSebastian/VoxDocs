@@ -120,7 +120,7 @@ Antworte im JSON-Format wie im System-Prompt beschrieben."""
 
         try:
             if use_ollama and self._check_ollama():
-                response = await self._call_ollama(user_prompt, model or "llama3.2")
+                response = await self._call_ollama(user_prompt, model or settings.LLM_MODEL)
             elif self._check_openai():
                 response = await self._call_openai(user_prompt, model or "gpt-4o-mini")
             else:
