@@ -15,6 +15,7 @@ from loguru import logger
 from app.core.database import get_db
 from app.models.audio import AudioRecording
 from app.models.transcription import Transcription, TranscriptionSegment
+from app.models.task import Task, TaskPriority, TaskStatus
 from app.services.encryption_service import encryption_service
 from app.services.whisper_service import whisper_service
 from app.services.classification_service import classifier
@@ -31,17 +32,32 @@ class TranscriptionSegmentResponse(BaseModel):
     confidence: Optional[float]
 
 
+class TaskResponse(BaseModel):
+    """Response model for task."""
+    id: int
+    description: str
+    priority: str
+    status: str
+    due_date: Optional[str]
+    tooth_reference: Optional[str]
+    category: Optional[str]
+
+
 class TranscriptionResponse(BaseModel):
     """Response model for transcription."""
     id: int
     recording_uuid: str
     full_text: str
+    corrected_text: Optional[str]
+    summary: Optional[str]
     language: str
     processing_time: Optional[float]
     confidence: Optional[float]
     segments: List[TranscriptionSegmentResponse]
+    tasks: List[TaskResponse]
     created_at: datetime
     correction_count: int
+    llm_processed: bool
 
 
 class TranscriptionCorrectionRequest(BaseModel):
@@ -58,7 +74,12 @@ async def get_transcription(
     """Get transcription for a recording."""
     result = await db.execute(
         select(AudioRecording)
-        .options(selectinload(AudioRecording.transcription).selectinload(Transcription.segments))
+        .options(
+            selectinload(AudioRecording.transcription)
+            .selectinload(Transcription.segments),
+            selectinload(AudioRecording.transcription)
+            .selectinload(Transcription.tasks)
+        )
         .where(AudioRecording.uuid == recording_uuid)
     )
     recording = result.scalar_one_or_none()
@@ -75,6 +96,8 @@ async def get_transcription(
         id=transcription.id,
         recording_uuid=recording_uuid,
         full_text=transcription.full_text,
+        corrected_text=transcription.corrected_text,
+        summary=transcription.summary,
         language=transcription.language,
         processing_time=transcription.processing_time_seconds,
         confidence=transcription.confidence_score,
@@ -87,8 +110,21 @@ async def get_transcription(
             )
             for seg in transcription.segments
         ],
+        tasks=[
+            TaskResponse(
+                id=task.id,
+                description=task.description,
+                priority=task.priority.value if task.priority else "mittel",
+                status=task.status.value if task.status else "pending",
+                due_date=task.due_date,
+                tooth_reference=task.tooth_reference,
+                category=task.category
+            )
+            for task in transcription.tasks
+        ],
         created_at=transcription.created_at,
-        correction_count=transcription.correction_count
+        correction_count=transcription.correction_count,
+        llm_processed=transcription.llm_processed is not None
     )
 
 
@@ -197,7 +233,12 @@ async def correct_transcription(
     """
     result = await db.execute(
         select(AudioRecording)
-        .options(selectinload(AudioRecording.transcription).selectinload(Transcription.segments))
+        .options(
+            selectinload(AudioRecording.transcription)
+            .selectinload(Transcription.segments),
+            selectinload(AudioRecording.transcription)
+            .selectinload(Transcription.tasks)
+        )
         .where(AudioRecording.uuid == recording_uuid)
     )
     recording = result.scalar_one_or_none()
@@ -238,6 +279,8 @@ async def correct_transcription(
         id=transcription.id,
         recording_uuid=recording_uuid,
         full_text=transcription.full_text,
+        corrected_text=transcription.corrected_text,
+        summary=transcription.summary,
         language=transcription.language,
         processing_time=transcription.processing_time_seconds,
         confidence=transcription.confidence_score,
@@ -250,8 +293,21 @@ async def correct_transcription(
             )
             for seg in transcription.segments
         ],
+        tasks=[
+            TaskResponse(
+                id=task.id,
+                description=task.description,
+                priority=task.priority.value if task.priority else "mittel",
+                status=task.status.value if task.status else "pending",
+                due_date=task.due_date,
+                tooth_reference=task.tooth_reference,
+                category=task.category
+            )
+            for task in transcription.tasks
+        ],
         created_at=transcription.created_at,
-        correction_count=transcription.correction_count
+        correction_count=transcription.correction_count,
+        llm_processed=transcription.llm_processed is not None
     )
 
 

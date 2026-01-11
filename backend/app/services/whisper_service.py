@@ -1,14 +1,13 @@
 """
 Whisper transcription service.
-Handles audio transcription using OpenAI Whisper model.
+Handles audio transcription using faster-whisper for improved performance.
 """
 
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-import whisper
-import torch
+from faster_whisper import WhisperModel
 from loguru import logger
 
 from app.core.config import settings
@@ -25,28 +24,45 @@ class TranscriptionResult:
 
 
 class WhisperService:
-    """Service for audio transcription using Whisper."""
+    """Service for audio transcription using faster-whisper."""
 
     def __init__(self):
-        self._model: Optional[whisper.Whisper] = None
+        self._model: Optional[WhisperModel] = None
         self._model_name = settings.WHISPER_MODEL
         self._device = settings.WHISPER_DEVICE
 
     def _load_model(self):
-        """Load the Whisper model if not already loaded."""
+        """Load the faster-whisper model if not already loaded."""
         if self._model is None:
-            logger.info(f"Loading Whisper model: {self._model_name}")
+            logger.info(f"Loading faster-whisper model: {self._model_name}")
             start_time = time.time()
 
-            # Determine device
+            # Determine device and compute type
             if self._device == "auto":
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                device = "cuda" if self._is_cuda_available() else "cpu"
             else:
                 device = self._device
 
-            self._model = whisper.load_model(self._model_name, device=device)
+            # Use int8 quantization on CPU for faster inference
+            compute_type = "int8" if device == "cpu" else "float16"
+
+            self._model = WhisperModel(
+                self._model_name,
+                device=device,
+                compute_type=compute_type,
+                download_root=str(settings.MODEL_DIR)
+            )
+
             load_time = time.time() - start_time
-            logger.info(f"Whisper model loaded in {load_time:.2f}s on {device}")
+            logger.info(f"faster-whisper model loaded in {load_time:.2f}s on {device} ({compute_type})")
+
+    def _is_cuda_available(self) -> bool:
+        """Check if CUDA is available."""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
 
     def transcribe(
         self,
@@ -70,51 +86,50 @@ class WhisperService:
         logger.info(f"Transcribing: {audio_path}")
         start_time = time.time()
 
-        # Transcription options
-        options = {
-            "task": task,
-            "verbose": False,
-            "word_timestamps": True,
-        }
-
-        if language:
-            options["language"] = language
-        else:
-            options["language"] = settings.WHISPER_LANGUAGE
-
         # Perform transcription
-        result = self._model.transcribe(str(audio_path), **options)
+        segments_generator, info = self._model.transcribe(
+            str(audio_path),
+            language=language or settings.WHISPER_LANGUAGE,
+            task=task,
+            word_timestamps=True,
+            vad_filter=True,  # Voice activity detection for better accuracy
+            vad_parameters=dict(min_silence_duration_ms=500),
+        )
 
+        # Collect segments
+        segments_list = list(segments_generator)
         processing_time = time.time() - start_time
         logger.info(f"Transcription completed in {processing_time:.2f}s")
 
-        # Calculate average confidence from segments
-        segments = result.get("segments", [])
-        if segments:
-            avg_confidence = sum(
-                seg.get("no_speech_prob", 0) for seg in segments
-            ) / len(segments)
-            confidence = 1.0 - avg_confidence  # Invert no_speech_prob
-        else:
-            confidence = 0.0
-
-        # Format segments
+        # Build full text and format segments
+        full_text = ""
         formatted_segments = []
-        for seg in segments:
+        total_confidence = 0.0
+
+        for seg in segments_list:
+            full_text += seg.text
+            confidence = 1.0 - seg.no_speech_prob
+            total_confidence += confidence
+
             formatted_segments.append({
-                "start": seg["start"],
-                "end": seg["end"],
-                "text": seg["text"].strip(),
-                "confidence": 1.0 - seg.get("no_speech_prob", 0),
-                "words": seg.get("words", [])
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip(),
+                "confidence": confidence,
+                "words": [
+                    {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                    for w in (seg.words or [])
+                ]
             })
 
+        avg_confidence = total_confidence / len(segments_list) if segments_list else 0.0
+
         return TranscriptionResult(
-            text=result["text"].strip(),
-            language=result.get("language", language or "de"),
+            text=full_text.strip(),
+            language=info.language,
             segments=formatted_segments,
             processing_time=processing_time,
-            confidence=confidence
+            confidence=avg_confidence
         )
 
     def transcribe_with_dental_boost(
@@ -125,7 +140,7 @@ class WhisperService:
         """
         Transcribe with dental terminology boosting.
 
-        Uses initial prompt to guide Whisper towards dental vocabulary.
+        Uses initial prompt to guide faster-whisper towards dental vocabulary.
 
         Args:
             audio_path: Path to the audio file
@@ -142,43 +157,52 @@ class WhisperService:
         # Dental-specific initial prompt to guide transcription
         dental_prompt = self._build_dental_prompt(custom_vocabulary)
 
-        # Transcription options with dental prompt
-        result = self._model.transcribe(
+        # Perform transcription with dental prompt
+        segments_generator, info = self._model.transcribe(
             str(audio_path),
             language=settings.WHISPER_LANGUAGE,
             task="transcribe",
-            verbose=False,
             word_timestamps=True,
             initial_prompt=dental_prompt,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=500),
+            condition_on_previous_text=True,  # Better context handling
         )
 
+        # Collect segments
+        segments_list = list(segments_generator)
         processing_time = time.time() - start_time
         logger.info(f"Dental transcription completed in {processing_time:.2f}s")
 
-        # Calculate confidence
-        segments = result.get("segments", [])
-        confidence = 0.0
-        if segments:
-            avg_no_speech = sum(seg.get("no_speech_prob", 0) for seg in segments) / len(segments)
-            confidence = 1.0 - avg_no_speech
-
-        # Format segments
+        # Build full text and format segments
+        full_text = ""
         formatted_segments = []
-        for seg in segments:
+        total_confidence = 0.0
+
+        for seg in segments_list:
+            full_text += seg.text
+            confidence = 1.0 - seg.no_speech_prob
+            total_confidence += confidence
+
             formatted_segments.append({
-                "start": seg["start"],
-                "end": seg["end"],
-                "text": seg["text"].strip(),
-                "confidence": 1.0 - seg.get("no_speech_prob", 0),
-                "words": seg.get("words", [])
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip(),
+                "confidence": confidence,
+                "words": [
+                    {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                    for w in (seg.words or [])
+                ]
             })
 
+        avg_confidence = total_confidence / len(segments_list) if segments_list else 0.0
+
         return TranscriptionResult(
-            text=result["text"].strip(),
-            language=result.get("language", "de"),
+            text=full_text.strip(),
+            language=info.language,
             segments=formatted_segments,
             processing_time=processing_time,
-            confidence=confidence
+            confidence=avg_confidence
         )
 
     def _build_dental_prompt(self, custom_vocabulary: Optional[List[str]] = None) -> str:
@@ -186,13 +210,13 @@ class WhisperService:
         # Common dental terms to guide transcription
         dental_terms = [
             # Tooth designations (FDI)
-            "Zahn eins eins", "Zahn eins sechs", "Zahn zwei sieben", "Zahn drei acht",
-            "Zahn vier sechs", "Quadrant eins", "Quadrant zwei",
+            "Zahn 11", "Zahn 16", "Zahn 27", "Zahn 38",
+            "Zahn 46", "Quadrant 1", "Quadrant 2",
             # Surfaces
             "mesial", "distal", "bukkal", "palatinal", "okklusal",
             "vestibulär", "oral", "inzisal", "approximal", "zervikal",
             # Diagnoses
-            "Karies Grad eins", "Karies Grad zwei", "Karies Grad drei",
+            "Karies Grad 1", "Karies Grad 2", "Karies Grad 3",
             "Parodontitis", "Pulpitis", "Gingivitis", "Periimplantitis",
             # Findings
             "Lockerungsgrad", "Taschentiefe", "Millimeter",
@@ -209,8 +233,8 @@ class WhisperService:
         if custom_vocabulary:
             dental_terms.extend(custom_vocabulary)
 
-        # Build prompt
-        prompt = "Zahnärztliche Befundung: " + ", ".join(dental_terms[:20])
+        # Build prompt - faster-whisper uses this to condition the model
+        prompt = "Zahnärztliche Dokumentation: " + ", ".join(dental_terms[:25])
         return prompt
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -218,8 +242,8 @@ class WhisperService:
         self._load_model()
         return {
             "model_name": self._model_name,
-            "device": str(next(self._model.parameters()).device),
-            "multilingual": self._model.is_multilingual,
+            "device": self._device,
+            "backend": "faster-whisper",
         }
 
 

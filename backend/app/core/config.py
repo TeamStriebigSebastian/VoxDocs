@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     CLASSIFICATION_MODEL: str = "rule-based"  # Options: rule-based, ml-classifier, llm
     CONFIDENCE_THRESHOLD: float = 0.7
 
+    # LLM Settings for dental vocabulary correction
+    OPENAI_API_KEY: str = ""  # Optional: for OpenAI-based correction
+    LLM_PROVIDER: str = "ollama"  # Options: ollama, openai
+    LLM_MODEL: str = "llama3.2"  # Default model for Ollama
+    OLLAMA_HOST: str = "http://ollama:11434"  # Ollama server URL (Docker service)
+    USE_LLM_CORRECTION: bool = True  # Enable LLM-based correction
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

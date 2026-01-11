@@ -34,10 +34,16 @@ class Transcription(Base):
     correction_count = Column(Integer, default=0)
     last_corrected_at = Column(DateTime)
 
+    # LLM-enhanced content
+    corrected_text = Column(Text, nullable=True)  # LLM-corrected version
+    summary = Column(Text, nullable=True)  # LLM-generated summary
+    llm_processed = Column(DateTime, nullable=True)  # When LLM processing was done
+
     # Relationships
     recording = relationship("AudioRecording", back_populates="transcription")
     segments = relationship("TranscriptionSegment", back_populates="transcription", cascade="all, delete-orphan")
     classifications = relationship("Classification", back_populates="transcription", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="transcription", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Transcription(id={self.id}, recording_id={self.recording_id})>"

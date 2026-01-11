@@ -4,8 +4,8 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 websockets==12.0
 
-# Audio processing
-openai-whisper==20231117
+# Audio processing - faster-whisper is 4x faster than openai-whisper
+faster-whisper==1.0.1
 librosa==0.10.1
 soundfile==0.12.1
 pydub==0.25.1
@@ -14,6 +14,10 @@ pydub==0.25.1
 torch==2.1.2
 transformers==4.36.2
 numpy==1.26.3
+
+# LLM for text correction and task extraction
+openai==1.12.0
+ollama==0.1.6
 
 # Encryption and security
 cryptography==41.0.7

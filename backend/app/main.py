@@ -20,8 +20,11 @@ from app.core.database import init_db, get_db_session
 from app.services.queue_service import queue_service, QueueJob
 from app.services.whisper_service import whisper_service
 from app.services.encryption_service import encryption_service
+from app.services.llm_service import llm_service
 from app.models.audio import AudioRecording
 from app.models.transcription import Transcription, TranscriptionSegment
+from app.models.task import Task, TaskPriority
+from app.models.classification import Classification
 from sqlalchemy import select
 from datetime import datetime
 
@@ -107,6 +110,55 @@ async def process_transcription_job(job: QueueJob) -> dict:
                     )
                     db.add(segment)
 
+                await db.flush()
+
+                # LLM-based correction, classification and task extraction
+                if settings.USE_LLM_CORRECTION:
+                    try:
+                        logger.info(f"Running LLM analysis for transcription {transcription.id}")
+                        llm_analysis = await llm_service.analyze_transcription(
+                            transcription_result.text,
+                            use_ollama=(settings.LLM_PROVIDER == "ollama")
+                        )
+
+                        # Update transcription with LLM results
+                        transcription.corrected_text = llm_analysis.corrected_text
+                        transcription.summary = llm_analysis.summary
+                        transcription.llm_processed = datetime.utcnow()
+
+                        # Create classifications from LLM
+                        for cls in llm_analysis.classifications:
+                            classification = Classification(
+                                transcription_id=transcription.id,
+                                category=cls.get("category", "other"),
+                                text=cls.get("text", ""),
+                                confidence=cls.get("confidence", 0.8)
+                            )
+                            db.add(classification)
+
+                        # Create tasks from LLM
+                        for task_data in llm_analysis.tasks:
+                            priority_map = {
+                                "hoch": TaskPriority.HIGH,
+                                "mittel": TaskPriority.MEDIUM,
+                                "niedrig": TaskPriority.LOW
+                            }
+                            task = Task(
+                                transcription_id=transcription.id,
+                                description=task_data.get("task", ""),
+                                priority=priority_map.get(
+                                    task_data.get("priority", "mittel"),
+                                    TaskPriority.MEDIUM
+                                ),
+                                due_date=task_data.get("due", "nächster Termin")
+                            )
+                            db.add(task)
+
+                        logger.info(f"LLM analysis completed: {len(llm_analysis.tasks)} tasks extracted")
+
+                    except Exception as llm_error:
+                        logger.warning(f"LLM analysis failed, continuing without: {llm_error}")
+
                 # Update recording status
                 recording.status = "completed"
                 recording.processing_started_at = job.started_at
@@ -119,7 +171,9 @@ async def process_transcription_job(job: QueueJob) -> dict:
                 return {
                     "transcription_id": transcription.id,
                     "text_preview": transcription_result.text[:200] if transcription_result.text else "",
-                    "processing_time": transcription_result.processing_time
+                    "processing_time": transcription_result.processing_time,
+                    "llm_corrected": transcription.corrected_text is not None,
+                    "tasks_extracted": len(llm_analysis.tasks) if settings.USE_LLM_CORRECTION else 0
                 }
 
             finally:
