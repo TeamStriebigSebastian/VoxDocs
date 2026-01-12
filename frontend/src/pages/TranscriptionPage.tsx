@@ -111,34 +111,6 @@ export default function TranscriptionPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  const getCategoryColor = (category: string): string => {
-    const colors: Record<string, string> = {
-      finding: 'bg-orange-100 text-orange-800',
-      diagnosis: 'bg-red-100 text-red-800',
-      treatment: 'bg-green-100 text-green-800',
-      material: 'bg-blue-100 text-blue-800',
-      instrument: 'bg-purple-100 text-purple-800',
-      anatomy: 'bg-pink-100 text-pink-800',
-      tooth: 'bg-yellow-100 text-yellow-800',
-      surface: 'bg-cyan-100 text-cyan-800',
-    }
-    return colors[category] || 'bg-slate-100 text-slate-800'
-  }
-
-  const getCategoryLabel = (category: string): string => {
-    const labels: Record<string, string> = {
-      finding: 'Befund',
-      diagnosis: 'Diagnose',
-      treatment: 'Behandlung',
-      material: 'Material',
-      instrument: 'Instrument',
-      anatomy: 'Anatomie',
-      tooth: 'Zahn',
-      surface: 'Fläche',
-    }
-    return labels[category] || category
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -388,7 +360,7 @@ export default function TranscriptionPage() {
               </svg>
               Materialverbrauch
             </h3>
-            {classifications?.classifications.filter(c => c.category === 'material').length > 0 ? (
+            {classifications && classifications.classifications.filter(c => c.category === 'material').length > 0 ? (
               <ul className="space-y-2">
                 {classifications.classifications
                   .filter(c => c.category === 'material')
