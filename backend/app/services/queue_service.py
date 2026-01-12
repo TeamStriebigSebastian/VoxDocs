@@ -48,10 +48,12 @@ class QueueService:
         self._queue: asyncio.Queue[QueueJob] = asyncio.Queue()
         self._pending_jobs: Dict[str, QueueJob] = {}
         self._completed_jobs: Dict[str, QueueJob] = {}
+        self._processing_jobs: set[str] = set()  # Track jobs currently being processed
         self._scheduler: Optional[AsyncIOScheduler] = None
         self._processor_task: Optional[asyncio.Task] = None
         self._is_running = False
         self._process_callback: Optional[Callable] = None
+        self._lock = asyncio.Lock()  # Lock for thread-safe job state changes
 
     async def start(self):
         """Start the queue service and scheduler."""
@@ -171,9 +173,25 @@ class QueueService:
 
     async def _process_job(self, job: QueueJob):
         """Process a single job."""
+        # Use lock to prevent race condition with double-processing
+        async with self._lock:
+            # Check if job is already being processed or completed
+            if job.id in self._processing_jobs:
+                logger.debug(f"Job {job.id} already being processed, skipping")
+                return
+            if job.id in self._completed_jobs:
+                logger.debug(f"Job {job.id} already completed, skipping")
+                return
+            if job.id not in self._pending_jobs:
+                logger.debug(f"Job {job.id} not in pending jobs, skipping")
+                return
+
+            # Mark as processing
+            self._processing_jobs.add(job.id)
+            job.status = JobStatus.PROCESSING
+            job.started_at = datetime.utcnow()
+
         logger.info(f"Processing job: {job.id}")
-        job.status = JobStatus.PROCESSING
-        job.started_at = datetime.utcnow()
 
         try:
             if self._process_callback:
@@ -193,9 +211,13 @@ class QueueService:
 
         finally:
             job.completed_at = datetime.utcnow()
-            # Move to completed jobs
-            del self._pending_jobs[job.id]
-            self._completed_jobs[job.id] = job
+            async with self._lock:
+                # Remove from processing set
+                self._processing_jobs.discard(job.id)
+                # Move to completed jobs
+                if job.id in self._pending_jobs:
+                    del self._pending_jobs[job.id]
+                self._completed_jobs[job.id] = job
 
             # Clean up old completed jobs (keep last 1000)
             if len(self._completed_jobs) > 1000:

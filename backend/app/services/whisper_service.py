@@ -3,12 +3,18 @@ Whisper transcription service.
 Handles audio transcription using faster-whisper for improved performance.
 """
 
+import os
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-from faster_whisper import WhisperModel
 from loguru import logger
+
+# Disable tqdm progress bars to avoid threading issues in async context
+# Must be set before importing faster_whisper
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+
+from faster_whisper import WhisperModel
 
 from app.core.config import settings
 
