@@ -4,8 +4,9 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 websockets==12.0
 
-# Audio processing - faster-whisper is 4x faster than openai-whisper
-faster-whisper==1.0.1
+# Audio processing - faster-whisper with compatible av version
+faster-whisper==0.10.1
+av>=10.0.0,<11.0.0
 librosa==0.10.1
 soundfile==0.12.1
 pydub==0.25.1
