@@ -45,7 +45,14 @@ export default function RecordingsListPage() {
   }
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
+    // Backend sends UTC times without 'Z' suffix - add it for proper parsing
+    let date: Date
+    if (dateString.includes('Z') || dateString.includes('+')) {
+      date = new Date(dateString)
+    } else {
+      // Assume UTC if no timezone specified
+      date = new Date(dateString + 'Z')
+    }
     return date.toLocaleDateString('de-DE', {
       day: '2-digit',
       month: '2-digit',

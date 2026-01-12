@@ -31,13 +31,13 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full">
+      {/* Main content - add padding-bottom for fixed nav */}
+      <main className="flex-1 px-4 py-6 pb-24 max-w-lg mx-auto w-full">
         {children}
       </main>
 
-      {/* Bottom navigation */}
-      <nav className="bg-white border-t border-slate-200 px-4 py-2">
+      {/* Bottom navigation - fixed at bottom, always visible */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 z-50 safe-area-bottom">
         <div className="flex justify-around max-w-lg mx-auto">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path
