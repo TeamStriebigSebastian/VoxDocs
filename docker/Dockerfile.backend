@@ -34,7 +34,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 
 # Install Python dependencies
+# Pin Cython<3.0 for av 10.x compatibility (av 10.x uses Cython 2.x syntax)
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir "Cython<3.0" && \
     pip install --no-cache-dir -r requirements.txt
 
 # Pre-download faster-whisper model to avoid runtime download
