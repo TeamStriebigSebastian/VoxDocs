@@ -70,9 +70,15 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop())
         setAudioStream(null)
+        setDuration(0) // Reset duration for next recording
 
-        if (options.onRecordingComplete) {
+        // Only call callback if we have actual data
+        if (options.onRecordingComplete && blob.size > 0 && finalDuration >= 0.5) {
           options.onRecordingComplete(blob, finalDuration)
+        } else if (blob.size === 0) {
+          console.warn('Recording produced empty blob, discarding')
+        } else if (finalDuration < 0.5) {
+          console.warn('Recording too short (<0.5s), discarding')
         }
       }
 

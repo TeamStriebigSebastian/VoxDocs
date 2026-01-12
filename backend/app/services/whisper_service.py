@@ -179,6 +179,8 @@ class WhisperService:
         segments_list = list(segments_generator)
         processing_time = time.time() - start_time
         logger.info(f"Dental transcription completed in {processing_time:.2f}s")
+        logger.info(f"Detected language: {info.language}, probability: {info.language_probability:.2f}")
+        logger.info(f"Audio duration: {info.duration:.2f}s, segments: {len(segments_list)}")
 
         # Build full text and format segments
         full_text = ""

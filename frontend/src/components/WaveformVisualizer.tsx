@@ -28,6 +28,12 @@ export default function WaveformVisualizer({ isRecording, audioStream }: Wavefor
 
     // Initialize audio context and analyzer
     const ctx = new AudioContext()
+
+    // Resume AudioContext if suspended (Chrome requires user gesture)
+    if (ctx.state === 'suspended') {
+      ctx.resume()
+    }
+
     setAudioContext(ctx)
 
     const analyzer = ctx.createAnalyser()
