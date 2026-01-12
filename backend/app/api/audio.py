@@ -60,6 +60,7 @@ async def upload_audio(
     room_id: Optional[int] = Form(None),
     user_id: Optional[int] = Form(None),
     process_immediately: bool = Form(False),
+    recorded_at: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -71,6 +72,7 @@ async def upload_audio(
         room_id: Optional treatment room ID
         user_id: Optional user ID who recorded
         process_immediately: If True, process immediately instead of queuing
+        recorded_at: ISO timestamp of when recording was made (not upload time)
     """
     # Validate file type
     if not file.filename.lower().endswith(('.wav', '.mp3', '.m4a', '.ogg', '.webm')):
@@ -110,6 +112,17 @@ async def upload_audio(
     # Get audio duration (simplified - would need actual audio processing)
     duration_seconds = None  # Will be set during processing
 
+    # Parse recorded_at timestamp (when recording was made, not upload time)
+    if recorded_at:
+        try:
+            # Handle ISO format with Z suffix or timezone offset
+            actual_recorded_at = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+        except ValueError:
+            logger.warning(f"Invalid recorded_at format: {recorded_at}, using current time")
+            actual_recorded_at = datetime.utcnow()
+    else:
+        actual_recorded_at = datetime.utcnow()
+
     # Calculate expiration date
     expires_at = datetime.utcnow() + timedelta(days=settings.RETENTION_DAYS)
 
@@ -123,7 +136,7 @@ async def upload_audio(
         practice_id=practice_id,
         room_id=room_id,
         recorded_by_user_id=user_id,
-        recorded_at=datetime.utcnow(),
+        recorded_at=actual_recorded_at,
         status=ProcessingStatus.PENDING,
         expires_at=expires_at
     )

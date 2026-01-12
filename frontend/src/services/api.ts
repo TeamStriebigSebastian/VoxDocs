@@ -11,7 +11,7 @@ export const api = axios.create({
 
 // Audio API
 export const audioApi = {
-  upload: async (file: Blob, practiceId: number, roomId?: number, processImmediately = false) => {
+  upload: async (file: Blob, practiceId: number, roomId?: number, processImmediately = false, recordedAt?: Date) => {
     const formData = new FormData()
     formData.append('file', file, 'recording.webm')
     formData.append('practice_id', practiceId.toString())
@@ -19,6 +19,10 @@ export const audioApi = {
       formData.append('room_id', roomId.toString())
     }
     formData.append('process_immediately', processImmediately.toString())
+    // Send actual recording time (when user pressed record), not upload time
+    if (recordedAt) {
+      formData.append('recorded_at', recordedAt.toISOString())
+    }
 
     const response = await api.post('/audio/upload', formData, {
       headers: {

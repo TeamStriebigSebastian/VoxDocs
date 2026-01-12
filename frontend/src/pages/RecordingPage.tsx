@@ -20,7 +20,7 @@ export default function RecordingPage() {
   const [uploads, setUploads] = useState<UploadStatus[]>([])
   const uploadIdCounter = useRef(0)
 
-  const handleRecordingComplete = async (blob: Blob, duration: number) => {
+  const handleRecordingComplete = async (blob: Blob, duration: number, recordedAt: Date) => {
     // Create a unique ID for this upload
     const uploadId = `upload_${++uploadIdCounter.current}`
 
@@ -32,7 +32,8 @@ export default function RecordingPage() {
       blob,
       practiceId,
       selectedRoomId || undefined,
-      processImmediately
+      processImmediately,
+      recordedAt
     ).then(({ success, offline, result }) => {
       if (success) {
         const uuid = offline

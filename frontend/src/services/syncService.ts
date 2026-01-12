@@ -102,7 +102,8 @@ class SyncService {
           recording.blob,
           recording.practiceId,
           recording.roomId,
-          recording.processImmediately
+          recording.processImmediately,
+          recording.recordedAt
         )
 
         await offlineStorage.deletePendingRecording(recording.id)
@@ -148,11 +149,15 @@ class SyncService {
     blob: Blob,
     practiceId: number,
     roomId?: number,
-    processImmediately = false
+    processImmediately = false,
+    recordedAt?: Date
   ): Promise<{ success: boolean; offline: boolean; result?: unknown }> {
+    // Use provided recordedAt or current time as fallback
+    const actualRecordedAt = recordedAt || new Date()
+
     if (this.isOnline) {
       try {
-        const result = await audioApi.upload(blob, practiceId, roomId, processImmediately)
+        const result = await audioApi.upload(blob, practiceId, roomId, processImmediately, actualRecordedAt)
         return { success: true, offline: false, result }
       } catch (error) {
         console.error('Upload failed, saving offline:', error)
@@ -165,7 +170,8 @@ class SyncService {
       blob,
       practiceId,
       roomId,
-      processImmediately
+      processImmediately,
+      recordedAt: actualRecordedAt
     })
 
     await this.notifyListeners('idle')

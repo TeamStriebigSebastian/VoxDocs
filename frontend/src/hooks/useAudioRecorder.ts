@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 
 interface UseAudioRecorderOptions {
-  onRecordingComplete?: (blob: Blob, duration: number) => void
+  onRecordingComplete?: (blob: Blob, duration: number, recordedAt: Date) => void
   onError?: (error: Error) => void
 }
 
@@ -66,6 +66,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType })
         const finalDuration = (Date.now() - startTimeRef.current) / 1000
+        const recordedAt = new Date(startTimeRef.current) // Actual recording start time
 
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop())
@@ -74,7 +75,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}): UseAudi
 
         // Only call callback if we have actual data
         if (options.onRecordingComplete && blob.size > 0 && finalDuration >= 0.5) {
-          options.onRecordingComplete(blob, finalDuration)
+          options.onRecordingComplete(blob, finalDuration, recordedAt)
         } else if (blob.size === 0) {
           console.warn('Recording produced empty blob, discarding')
         } else if (finalDuration < 0.5) {

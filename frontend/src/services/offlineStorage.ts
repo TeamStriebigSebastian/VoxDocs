@@ -14,7 +14,8 @@ interface PendingRecording {
   practiceId: number
   roomId?: number
   processImmediately: boolean
-  createdAt: Date
+  recordedAt: Date  // When the recording was actually made
+  createdAt: Date   // When it was saved to offline storage
   retryCount: number
   lastError?: string
 }
