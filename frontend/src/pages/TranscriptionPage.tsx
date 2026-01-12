@@ -20,12 +20,11 @@ interface TaskData {
 }
 
 interface Classification {
+  id: number
   category: string
-  extracted_text: string
-  normalized_value: string | null
+  text: string
   confidence: number
-  tooth_number: string | null
-  surface: string | null
+  is_verified: boolean
 }
 
 interface TranscriptionData {
@@ -42,14 +41,10 @@ interface TranscriptionData {
 }
 
 interface ClassificationData {
+  recording_uuid: string
   total_entities: number
   classifications: Classification[]
-  summary: {
-    teeth_mentioned: string[]
-    diagnoses: Array<{ text: string; tooth: string | null }>
-    treatments: Array<{ text: string; tooth: string | null }>
-    findings: Array<{ text: string; tooth: string | null }>
-  }
+  llm_processed: boolean
 }
 
 export default function TranscriptionPage() {
@@ -320,84 +315,13 @@ export default function TranscriptionPage() {
               </svg>
               <div>
                 <h3 className="font-medium text-blue-800 text-sm">Abrechnungsrelevante Positionen</h3>
-                <p className="text-blue-700 text-xs mt-1">Erkannte Tätigkeiten und Materialien für die Abrechnung</p>
+                <p className="text-blue-700 text-xs mt-1">Erkannte Befunde, Behandlungen und Planungen</p>
               </div>
             </div>
           </div>
 
-          {/* Tätigkeiten / Activities */}
-          <div className="card">
-            <h3 className="font-medium text-green-700 mb-3 flex items-center">
-              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              Tätigkeiten
-            </h3>
-            {classifications?.summary.treatments && classifications.summary.treatments.length > 0 ? (
-              <ul className="space-y-2">
-                {classifications.summary.treatments.map((t, i) => (
-                  <li key={i} className="flex items-start py-2 border-b border-slate-100 last:border-0">
-                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-medium mr-3 flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <p className="text-slate-800">{t.text}</p>
-                      {t.tooth && <p className="text-sm text-slate-500">Zahn {t.tooth}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-slate-400 text-sm">Keine Tätigkeiten erkannt</p>
-            )}
-          </div>
-
-          {/* Materialverbrauch / Materials */}
-          <div className="card">
-            <h3 className="font-medium text-blue-700 mb-3 flex items-center">
-              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              Materialverbrauch
-            </h3>
-            {classifications && classifications.classifications.filter(c => c.category === 'material').length > 0 ? (
-              <ul className="space-y-2">
-                {classifications.classifications
-                  .filter(c => c.category === 'material')
-                  .map((m, i) => (
-                    <li key={i} className="flex items-center py-2 border-b border-slate-100 last:border-0">
-                      <span className="w-2 h-2 rounded-full bg-blue-500 mr-3 flex-shrink-0"></span>
-                      <span className="text-slate-800">{m.extracted_text}</span>
-                      {m.tooth_number && <span className="text-sm text-slate-500 ml-2">(Zahn {m.tooth_number})</span>}
-                    </li>
-                  ))}
-              </ul>
-            ) : (
-              <p className="text-slate-400 text-sm">Kein Materialverbrauch erkannt</p>
-            )}
-          </div>
-
-          {/* Beteiligte Zähne */}
-          {classifications?.summary.teeth_mentioned && classifications.summary.teeth_mentioned.length > 0 && (
-            <div className="card">
-              <h3 className="font-medium text-yellow-700 mb-3 flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                </svg>
-                Beteiligte Zähne
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {classifications.summary.teeth_mentioned.map((tooth) => (
-                  <span key={tooth} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
-                    {tooth}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Befunde/Diagnosen - relevant for billing codes */}
-          {classifications?.summary.diagnoses && classifications.summary.diagnoses.length > 0 && (
+          {/* Befunde */}
+          {classifications && classifications.classifications.filter(c => c.category === 'befund').length > 0 && (
             <div className="card">
               <h3 className="font-medium text-red-700 mb-3 flex items-center">
                 <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -406,31 +330,114 @@ export default function TranscriptionPage() {
                 Befunde / Diagnosen
               </h3>
               <ul className="space-y-2">
-                {classifications.summary.diagnoses.map((d, i) => (
-                  <li key={i} className="flex items-start py-2 border-b border-slate-100 last:border-0">
-                    <span className="w-2 h-2 rounded-full bg-red-500 mr-3 mt-2 flex-shrink-0"></span>
-                    <div>
-                      <p className="text-slate-800">{d.text}</p>
-                      {d.tooth && <p className="text-sm text-slate-500">Zahn {d.tooth}</p>}
-                    </div>
-                  </li>
-                ))}
+                {classifications.classifications
+                  .filter(c => c.category === 'befund')
+                  .map((item, i) => (
+                    <li key={item.id} className="flex items-start py-2 border-b border-slate-100 last:border-0">
+                      <span className="w-6 h-6 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-medium mr-3 flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-slate-800">{item.text}</p>
+                        <p className="text-xs text-slate-400 mt-1">Konfidenz: {Math.round(item.confidence * 100)}%</p>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Behandlungen */}
+          {classifications && classifications.classifications.filter(c => c.category === 'behandlung').length > 0 && (
+            <div className="card">
+              <h3 className="font-medium text-green-700 mb-3 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Behandlungen
+              </h3>
+              <ul className="space-y-2">
+                {classifications.classifications
+                  .filter(c => c.category === 'behandlung')
+                  .map((item, i) => (
+                    <li key={item.id} className="flex items-start py-2 border-b border-slate-100 last:border-0">
+                      <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-medium mr-3 flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-slate-800">{item.text}</p>
+                        <p className="text-xs text-slate-400 mt-1">Konfidenz: {Math.round(item.confidence * 100)}%</p>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Planungen */}
+          {classifications && classifications.classifications.filter(c => c.category === 'planung').length > 0 && (
+            <div className="card">
+              <h3 className="font-medium text-purple-700 mb-3 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Planungen
+              </h3>
+              <ul className="space-y-2">
+                {classifications.classifications
+                  .filter(c => c.category === 'planung')
+                  .map((item, i) => (
+                    <li key={item.id} className="flex items-start py-2 border-b border-slate-100 last:border-0">
+                      <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-medium mr-3 flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-slate-800">{item.text}</p>
+                        <p className="text-xs text-slate-400 mt-1">Konfidenz: {Math.round(item.confidence * 100)}%</p>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Anamnese */}
+          {classifications && classifications.classifications.filter(c => c.category === 'anamnese').length > 0 && (
+            <div className="card">
+              <h3 className="font-medium text-yellow-700 mb-3 flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                Anamnese
+              </h3>
+              <ul className="space-y-2">
+                {classifications.classifications
+                  .filter(c => c.category === 'anamnese')
+                  .map((item, i) => (
+                    <li key={item.id} className="flex items-start py-2 border-b border-slate-100 last:border-0">
+                      <span className="w-6 h-6 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center text-xs font-medium mr-3 flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-slate-800">{item.text}</p>
+                        <p className="text-xs text-slate-400 mt-1">Konfidenz: {Math.round(item.confidence * 100)}%</p>
+                      </div>
+                    </li>
+                  ))}
               </ul>
             </div>
           )}
 
           {/* Empty state */}
-          {(!classifications ||
-            ((!classifications.summary.treatments || classifications.summary.treatments.length === 0) &&
-             classifications.classifications.filter(c => c.category === 'material').length === 0)) && (
+          {(!classifications || classifications.classifications.length === 0) && (
             <div className="card text-center py-8">
               <svg className="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
-              <p className="text-slate-500">Keine abrechnungsrelevanten Positionen erkannt</p>
+              <p className="text-slate-500">Keine Klassifikationen erkannt</p>
               <p className="text-slate-400 text-sm mt-1">
                 {transcription.llm_processed
-                  ? 'Die KI hat keine Tätigkeiten oder Materialien in dieser Aufnahme gefunden.'
+                  ? 'Die KI hat keine relevanten Informationen in dieser Aufnahme gefunden.'
                   : 'Die KI-Analyse wurde noch nicht durchgeführt.'}
               </p>
             </div>
