@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useAppStore } from '../stores/appStore'
 
 interface Photo {
   uuid: string
@@ -38,7 +37,6 @@ interface Appointment {
 export default function AppointmentReviewPage() {
   const { appointmentUuid } = useParams<{ appointmentUuid: string }>()
   const navigate = useNavigate()
-  const { practiceId } = useAppStore()
 
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)

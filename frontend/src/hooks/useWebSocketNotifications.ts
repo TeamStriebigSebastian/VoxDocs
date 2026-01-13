@@ -13,7 +13,7 @@ export function useWebSocketNotifications(onNotification?: NotificationCallback)
   const wsRef = useRef<WebSocket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  const reconnectTimeoutRef = useRef<number>()
 
   useEffect(() => {
     connectWebSocket()
