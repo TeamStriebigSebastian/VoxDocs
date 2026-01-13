@@ -1,10 +1,21 @@
 # Backend Service
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies including build tools for PyAV
 RUN apt-get update && apt-get install -y \
+    # Audio/Video processing
     ffmpeg \
     libsndfile1 \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswresample-dev \
+    libavfilter-dev \
+    # Build tools for PyAV
+    build-essential \
+    pkg-config \
+    python3-dev \
+    # Utilities
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
