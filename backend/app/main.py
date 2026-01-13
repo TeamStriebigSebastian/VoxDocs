@@ -15,7 +15,7 @@ from app.core.config import settings, ensure_directories
 # Ensure directories exist before anything else
 ensure_directories()
 
-from app.api import audio, transcription, classification, health, onboarding, export
+from app.api import audio, transcription, classification, health, onboarding, export, appointments, webhooks
 from app.core.database import init_db, get_db_session
 from app.services.queue_service import queue_service, QueueJob
 from app.services.whisper_service import whisper_service
@@ -236,6 +236,8 @@ app.include_router(transcription.router, prefix="/api/transcription", tags=["Tra
 app.include_router(classification.router, prefix="/api/classification", tags=["Classification"])
 app.include_router(onboarding.router, prefix="/api/onboarding", tags=["Onboarding"])
 app.include_router(export.router, prefix="/api/export", tags=["Export"])
+app.include_router(appointments.router, tags=["Appointments"])
+app.include_router(webhooks.router, tags=["Webhooks"])
 
 
 @app.get("/")
