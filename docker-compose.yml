@@ -1,44 +1,125 @@
 # VoxDocs Docker Compose Configuration
-# GDPR-compliant Dental Speech-to-Text Documentation System
+# GDPR-compliant Nursing Care Speech-to-Text Documentation System
+#
+# FEATURES:
+# - Multilingual: Whisper transcribes ANY language (Polish, Romanian, Turkish, etc.)
+# - LLM translates everything to German and categorizes
+# - Piper TTS with German Thorsten voice reads back the documentation
+# - All processing happens LOCALLY (no external APIs for patient data!)
 
 version: '3.8'
 
 services:
-  # Backend API Service
-  backend:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.backend
-    container_name: voxdocs-backend
+  # PostgreSQL Database (for nursing appointments)
+  db:
+    image: postgres:15-alpine
+    container_name: voxdocs-db
     restart: unless-stopped
     environment:
-      - DEBUG=false
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-use-strong-key}
-      - MASTER_KEY=${MASTER_KEY:-change-me-in-production-32-bytes!}
-      - DATABASE_URL=sqlite+aiosqlite:///./data/voxdocs.db
-      - WHISPER_MODEL=small
-      - WHISPER_DEVICE=cpu
-      - BATCH_PROCESSING_HOUR=2
-      - RETENTION_DAYS=90
+      POSTGRES_DB: voxdocs
+      POSTGRES_USER: voxdocs
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-voxdocs_secure_password_change_in_production}
     volumes:
-      # Persistent data storage
-      - voxdocs-data:/app/data
-      - voxdocs-models:/app/models
-      - voxdocs-logs:/app/logs
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - voxdocs-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health')"]
+      test: ["CMD-SHELL", "pg_isready -U voxdocs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Ollama - Local LLM for GDPR compliance
+  # Translates ANY language to German and categorizes nursing documentation
+  ollama:
+    image: ollama/ollama:latest
+    container_name: voxdocs-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - voxdocs-network
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voxdocs-backend
+    restart: unless-stopped
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://voxdocs:${DB_PASSWORD:-voxdocs_secure_password_change_in_production}@db:5432/voxdocs
+
+      # Security
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production-use-strong-key}
+      - MASTER_KEY=${MASTER_KEY:-change-me-in-production-32-bytes!}
+
+      # Whisper - MULTILINGUAL! Supports all languages
+      # Transcribes Polish, Romanian, Turkish, Arabic, etc. as-is
+      - WHISPER_MODEL=${WHISPER_MODEL:-medium}
+      - WHISPER_DEVICE=cpu
+      # Options: tiny, base, small, medium (recommended), large-v2, large-v3
+
+      # LLM (Ollama) - Translates to German and categorizes
+      - USE_LLM_CORRECTION=true
+      - LLM_PROVIDER=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - LLM_MODEL=${LLM_MODEL:-mistral}
+      # Model will auto-download on first use
+      # Alternatives: llama3.2, gemma2, qwen2.5
+
+      # TTS (Piper) - German Thorsten voice (deep male)
+      - PIPER_EXECUTABLE=piper
+      - PIPER_VOICE_MODEL=/app/models/de_DE-thorsten-high
+      - TTS_OUTPUT_DIR=/app/storage/tts
+
+      # CORS
+      - CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
+
+      # Other
+      - BATCH_PROCESSING_HOUR=2
+      - RETENTION_DAYS=90
+    volumes:
+      # Persistent data storage
+      - voxdocs-data:/app/data
+      - voxdocs-storage:/app/storage
+      - voxdocs-models:/app/models
+      - voxdocs-logs:/app/logs
+    networks:
+      - voxdocs-network
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
   # Frontend PWA Service
   frontend:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: voxdocs-frontend
     restart: unless-stopped
     ports:
@@ -53,11 +134,17 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-      start_period: 5s
+      start_period: 10s
 
 # Named volumes for persistent data
 volumes:
+  postgres-data:
+    driver: local
+  ollama-data:
+    driver: local
   voxdocs-data:
+    driver: local
+  voxdocs-storage:
     driver: local
   voxdocs-models:
     driver: local

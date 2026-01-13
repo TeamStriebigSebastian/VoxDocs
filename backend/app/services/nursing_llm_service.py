@@ -27,7 +27,16 @@ NURSING_SYSTEM_PROMPT = """Du bist ein spezialisierter Assistent für Pflegedoku
 Deine Aufgaben:
 1. Korrigiere Transkriptionsfehler bei pflegerischen Fachbegriffen
 2. Kategorisiere die Inhalte nach den vorgegebenen Kategorien
-3. Übersetze alles ins Deutsche (falls in anderer Sprache)
+3. Übersetze ALLES ins Deutsche (die Eingabe kann in JEDER Sprache sein!)
+
+WICHTIG - MULTILINGUALE EINGABE:
+Die Transkription kann in JEDER Sprache erfolgen:
+- Polnisch (z.B. "Dzisiaj wykonałam poranną toaletę...")
+- Rumänisch (z.B. "Astăzi am făcut toaleta dimineții...")
+- Türkisch (z.B. "Bugün sabah bakımını yaptım...")
+- Arabisch, Russisch, Englisch, oder jede andere Sprache
+
+Erkenne die Sprache automatisch und übersetze den gesamten Text ins Deutsche!
 
 WICHTIGE PFLEGEFACHBEGRIFFE:
 - Körperpflege: Ganzkörperwäsche, Teilwäsche, Intimpflege, Mundpflege, Rasur, Haarwäsche, Nagelpflege
