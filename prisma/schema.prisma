@@ -1,0 +1,104 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Appointment {
+  id          String   @id @default(cuid())
+  patientName String?
+  patientId   String?
+  startTime   DateTime
+  endTime     DateTime?
+  status      AppointmentStatus @default(IN_PROGRESS)
+
+  audioRecordings AudioRecording[]
+  photos          Photo[]
+  transcription   Transcription?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([startTime])
+}
+
+model AudioRecording {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  fileUrl       String
+  fileName      String
+  duration      Float?      // Dauer in Sekunden
+  mimeType      String
+  fileSize      Int
+
+  createdAt     DateTime    @default(now())
+
+  @@index([appointmentId])
+}
+
+model Photo {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  fileUrl       String
+  fileName      String
+  mimeType      String
+  fileSize      Int
+
+  createdAt     DateTime    @default(now())
+
+  @@index([appointmentId])
+}
+
+model Transcription {
+  id              String      @id @default(cuid())
+  appointmentId   String      @unique
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  // Kategorisierte Inhalte
+  summary         String      @db.Text  // Gesamte Aufnahme/Zusammenfassung
+  services        String      @db.Text  // Erbrachte Leistungen
+  observations    String      @db.Text  // Besonderheiten
+  nextTasks       String      @db.Text  // Aufgaben für nächsten Termin
+
+  // TTS Audio
+  ttsAudioUrl     String?     // URL zum generierten Audio
+  ttsAudioReady   Boolean     @default(false)
+
+  // Status
+  status          TranscriptionStatus @default(PROCESSING)
+  confirmedAt     DateTime?
+  confirmedBy     String?
+
+  // Metadaten
+  originalLanguage String?    // Erkannte Sprache
+  processingTime   Float?     // Verarbeitungszeit in Sekunden
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status])
+  @@index([ttsAudioReady])
+}
+
+enum AppointmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TranscriptionStatus {
+  PROCESSING
+  READY
+  CONFIRMED
+  ERROR
+}
