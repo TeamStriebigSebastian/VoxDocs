@@ -40,6 +40,9 @@ class AudioRecording(Base):
     recorded_by_user_id = Column(Integer, ForeignKey("users.id"))
     recorded_at = Column(DateTime, default=datetime.utcnow)
 
+    # Optional appointment reference (for nursing care)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+
     # Processing status
     status = Column(Enum(ProcessingStatus), default=ProcessingStatus.PENDING)
     processing_started_at = Column(DateTime)
@@ -56,6 +59,7 @@ class AudioRecording(Base):
     room = relationship("Room", back_populates="recordings")
     recorded_by = relationship("User", back_populates="recordings")
     transcription = relationship("Transcription", back_populates="recording", uselist=False)
+    appointment = relationship("Appointment", back_populates="audio_recordings")
 
     def __repr__(self):
         return f"<AudioRecording(id={self.id}, uuid={self.uuid}, status={self.status})>"

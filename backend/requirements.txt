@@ -20,6 +20,9 @@ numpy==1.26.3
 openai==1.12.0
 ollama==0.4.7
 
+# TTS (Text-to-Speech)
+piper-tts==1.2.0
+
 # Encryption and security
 cryptography==41.0.7
 python-jose[cryptography]==3.3.0

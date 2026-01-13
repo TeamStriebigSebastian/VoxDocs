@@ -6,6 +6,9 @@ from app.models.classification import Classification
 from app.models.practice import Practice, Room, User
 from app.models.onboarding import OnboardingSession, PhraseRecording
 from app.models.task import Task, TaskPriority, TaskStatus
+from app.models.appointment import Appointment, AppointmentStatus
+from app.models.photo import Photo
+from app.models.nursing_transcription import NursingTranscription, TranscriptionStatus
 
 __all__ = [
     "AudioRecording",
@@ -20,4 +23,9 @@ __all__ = [
     "Task",
     "TaskPriority",
     "TaskStatus",
+    "Appointment",
+    "AppointmentStatus",
+    "Photo",
+    "NursingTranscription",
+    "TranscriptionStatus",
 ]

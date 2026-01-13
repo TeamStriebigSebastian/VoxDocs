@@ -46,6 +46,7 @@ class Practice(Base):
     users = relationship("User", back_populates="practice", cascade="all, delete-orphan")
     recordings = relationship("AudioRecording", back_populates="practice")
     onboarding_sessions = relationship("OnboardingSession", back_populates="practice")
+    appointments = relationship("Appointment", back_populates="practice")
 
     def __repr__(self):
         return f"<Practice(id={self.id}, name={self.name})>"
@@ -97,6 +98,7 @@ class User(Base):
     practice = relationship("Practice", back_populates="users")
     recordings = relationship("AudioRecording", back_populates="recorded_by")
     onboarding_sessions = relationship("OnboardingSession", back_populates="user")
+    appointments = relationship("Appointment", back_populates="caregiver")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, role={self.role})>"
