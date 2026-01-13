@@ -6,11 +6,14 @@ RUN apt-get update && apt-get install -y \
     # Audio/Video processing
     ffmpeg \
     libsndfile1 \
+    # All FFmpeg development libraries for PyAV
     libavcodec-dev \
     libavformat-dev \
     libavutil-dev \
-    libswresample-dev \
+    libavdevice-dev \
     libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
     # Build tools for PyAV
     build-essential \
     pkg-config \
