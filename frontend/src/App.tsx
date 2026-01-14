@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import HomePage from './pages/HomePage'
 import RecordingPage from './pages/RecordingPage'
 import RecordingsListPage from './pages/RecordingsListPage'
 import TranscriptionPage from './pages/TranscriptionPage'
@@ -14,7 +15,11 @@ function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<RecordingPage />} />
+        {/* Homepage with selection between dental and nursing care */}
+        <Route path="/" element={<HomePage />} />
+
+        {/* Dental documentation routes */}
+        <Route path="/dental" element={<RecordingPage />} />
         <Route path="/recordings" element={<RecordingsListPage />} />
         <Route path="/transcription/:uuid" element={<TranscriptionPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
