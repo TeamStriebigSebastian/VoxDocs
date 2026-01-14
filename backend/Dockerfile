@@ -39,11 +39,8 @@ COPY . .
 RUN mkdir -p storage/encrypted storage/decrypted storage/tts logs
 
 # Download Piper voice model (Thorsten - German male voice)
-RUN mkdir -p models && \
-    curl -L -o models/de_DE-thorsten-high.onnx \
-    https://github.com/rhasspy/piper/releases/download/v1.2.0/de_DE-thorsten-high.onnx && \
-    curl -L -o models/de_DE-thorsten-high.onnx.json \
-    https://github.com/rhasspy/piper/releases/download/v1.2.0/de_DE-thorsten-high.onnx.json
+# Models will be downloaded at runtime if not present
+RUN mkdir -p models
 
 EXPOSE 8000
 
