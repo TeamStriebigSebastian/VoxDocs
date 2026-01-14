@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
     environment:
       # Database
-      - DATABASE_URL=postgresql://voxdocs:${DB_PASSWORD:-voxdocs_secure_password_change_in_production}@db:5432/voxdocs
+      - DATABASE_URL=postgresql+asyncpg://voxdocs:${DB_PASSWORD:-voxdocs_secure_password_change_in_production}@db:5432/voxdocs
 
       # Security
       - DEBUG=false
