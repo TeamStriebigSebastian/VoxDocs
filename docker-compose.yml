@@ -47,12 +47,8 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "timeout 5 sh -c 'cat < /dev/null > /dev/tcp/localhost/11434' || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    # Note: Health check removed - ollama/ollama:latest is too minimal (no curl/wget/nc)
+    # Backend uses service_started dependency instead of service_healthy
 
   # Backend API Service
   backend:
@@ -107,13 +103,13 @@ services:
       db:
         condition: service_healthy
       ollama:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 90s
+      start_period: 120s
 
   # Frontend PWA Service
   frontend:
