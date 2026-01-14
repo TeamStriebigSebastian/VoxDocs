@@ -175,3 +175,71 @@ class EncryptionService:
 
 # Global service instance
 encryption_service = EncryptionService()
+
+
+# Helper functions for direct use
+async def encrypt_file(data: bytes, filename: str) -> Tuple[str, int]:
+    """
+    Encrypt file data and save to encrypted directory.
+
+    Args:
+        data: File data to encrypt
+        filename: Filename to save as
+
+    Returns:
+        Tuple of (encrypted_filename, file_size)
+    """
+    import uuid
+    from pathlib import Path
+
+    # Generate unique encrypted filename
+    unique_id = str(uuid.uuid4())[:8]
+    encrypted_filename = f"{Path(filename).stem}_{unique_id}.enc"
+    encrypted_path = settings.ENCRYPTED_DIR / encrypted_filename
+
+    # Ensure directory exists
+    settings.ENCRYPTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Encrypt data
+    encrypted_data, nonce, salt = encryption_service.encrypt_data(data)
+
+    # Write encrypted file with metadata header
+    # Format: [salt (16 bytes)][nonce (12 bytes)][encrypted_data]
+    with open(encrypted_path, "wb") as f:
+        f.write(salt)
+        f.write(nonce)
+        f.write(encrypted_data)
+
+    file_size = len(data)
+    logger.info(f"File encrypted: {encrypted_filename} ({file_size} bytes)")
+
+    return encrypted_filename, file_size
+
+
+async def decrypt_file(encrypted_filename: str) -> bytes:
+    """
+    Decrypt a file from the encrypted directory.
+
+    Args:
+        encrypted_filename: Name of the encrypted file
+
+    Returns:
+        Decrypted file data
+    """
+    encrypted_path = settings.ENCRYPTED_DIR / encrypted_filename
+
+    if not encrypted_path.exists():
+        raise FileNotFoundError(f"Encrypted file not found: {encrypted_filename}")
+
+    # Read encrypted file
+    with open(encrypted_path, "rb") as f:
+        salt = f.read(EncryptionService.SALT_SIZE)
+        nonce = f.read(EncryptionService.NONCE_SIZE)
+        encrypted_data = f.read()
+
+    # Decrypt
+    decrypted_data = encryption_service.decrypt_data(encrypted_data, nonce, salt)
+
+    logger.info(f"File decrypted: {encrypted_filename}")
+    return decrypted_data
+
