@@ -1,6 +1,7 @@
-# VoxDocs - Dental Speech-to-Text Documentation System
+# VoxDocs -  Speech-to-Text Documentation System
 
-A GDPR-compliant speech recognition system for German dental practices that transcribes patient conversations during treatments and automatically classifies dental terminology.
+A GDPR-compliant speech recognition system for multilanguage teams that transcribes conversations during while working and classifing tasks while also checking if tasks have been verbally checked off. And of course it uses the slm power to give every user the tasks and documentation in their configured language. 
+Breaking down the language barrier for teams for work teams. No typing, no complicated workflows. Just a list of tasks in your language. 
 
 ## Features
 
