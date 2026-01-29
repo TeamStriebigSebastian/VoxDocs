@@ -4,7 +4,7 @@ Application configuration settings.
 
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 
 
@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["*"]  # Allow all origins for local network testing
 
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./data/voxdocs.db"
+    # Database
+    # Use absolute path relative to backend root (backend/app/core/config.py -> backend)
+    DATABASE_URL: str = f"sqlite+aiosqlite:///{Path(__file__).resolve().parents[2]}/data/voxdocs.db"
 
     # Storage paths
     DATA_DIR: Path = Path("./data")
@@ -35,7 +37,7 @@ class Settings(BaseSettings):
 
     # Whisper settings
     WHISPER_MODEL: str = "small"
-    WHISPER_LANGUAGE: str = "de"
+    WHISPER_LANGUAGE: Optional[str] = None
     WHISPER_DEVICE: str = "cpu"
 
     # Processing
@@ -74,3 +76,7 @@ def ensure_directories():
             dir_path.mkdir(parents=True, exist_ok=True)
         except PermissionError:
             pass  # Directory might already exist or be managed by Docker volume
+
+    # Database
+    # Try simple relative path
+    DATABASE_URL: str = "sqlite+aiosqlite:///data/voxdocs.db"

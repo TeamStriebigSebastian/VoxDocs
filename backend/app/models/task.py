@@ -1,56 +1,41 @@
-"""
-Task model for storing extracted tasks from transcriptions.
-"""
-
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
+from typing import Optional
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import func
 import enum
+import uuid
 
 from app.core.database import Base
 
-
-class TaskPriority(str, enum.Enum):
-    """Priority levels for tasks."""
-    HIGH = "hoch"
-    MEDIUM = "mittel"
-    LOW = "niedrig"
-
+class TaskType(str, enum.Enum):
+    ONE_SHOT = "one_shot"
+    REMINDER_ONCE = "reminder_once"
+    RECURRING_ALWAYS = "recurring_always"
+    RECURRING_INTERVAL = "recurring_interval"
 
 class TaskStatus(str, enum.Enum):
-    """Status of a task."""
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
+    ACTIVE = "active"
     COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
 
 class Task(Base):
-    """Model for tasks extracted from transcriptions."""
-
     __tablename__ = "tasks"
 
-    id = Column(Integer, primary_key=True, index=True)
-    transcription_id = Column(Integer, ForeignKey("transcriptions.id"), nullable=False)
-
-    # Task details
-    description = Column(Text, nullable=False)
-    priority = Column(Enum(TaskPriority), default=TaskPriority.MEDIUM)
-    status = Column(Enum(TaskStatus), default=TaskStatus.PENDING)
-
-    # Scheduling
-    due_date = Column(String(100))  # e.g., "nächster Termin", "in 2 Wochen"
-
-    # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
-
-    # Patient/context info
-    tooth_reference = Column(String(50), nullable=True)  # e.g., "Zahn 36"
-    category = Column(String(50), nullable=True)  # e.g., "Kontrolle", "Behandlung"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid.uuid4()))
+    case_id: Mapped[int] = mapped_column(ForeignKey("case_files.id"))
+    
+    title: Mapped[str] = mapped_column(String(255))
+    task_type: Mapped[TaskType] = mapped_column(SQLEnum(TaskType))
+    status: Mapped[TaskStatus] = mapped_column(SQLEnum(TaskStatus), default=TaskStatus.ACTIVE)
+    
+    repeat_interval_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True) # Simple interval
+    next_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    transcription = relationship("Transcription", back_populates="tasks")
-
-    def __repr__(self):
-        return f"<Task {self.id}: {self.description[:30]}...>"
+    case_file: Mapped["CaseFile"] = relationship(back_populates="tasks")
+    translations: Mapped[list["TaskTranslation"]] = relationship(back_populates="task", cascade="all, delete-orphan")

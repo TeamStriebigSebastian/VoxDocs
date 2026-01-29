@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from datetime import datetime
 from typing import Dict, Any
 
-from app.services.queue_service import queue_service
+# from app.services.queue_service import queue_service # Removed for Platform MVP Pivot
 
 router = APIRouter()
 
@@ -17,24 +17,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "service": "VoxDocs API"
+        "service": "Platform API"
     }
 
-
-@router.get("/health/detailed")
-async def detailed_health_check() -> Dict[str, Any]:
-    """Detailed health check with queue status."""
-    queue_stats = queue_service.get_queue_stats()
-
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "VoxDocs API",
-        "components": {
-            "api": "healthy",
-            "queue": {
-                "status": "healthy",
-                "stats": queue_stats
-            }
-        }
-    }
+# Detailed health check removed for now

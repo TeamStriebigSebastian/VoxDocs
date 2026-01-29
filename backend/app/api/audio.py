@@ -3,7 +3,7 @@ Audio recording API endpoints.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
@@ -116,7 +116,9 @@ async def upload_audio(
     if recorded_at:
         try:
             # Handle ISO format with Z suffix or timezone offset
-            actual_recorded_at = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(recorded_at.replace('Z', '+00:00'))
+            # Convert to UTC and make naive to match database expectation
+            actual_recorded_at = dt.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError:
             logger.warning(f"Invalid recorded_at format: {recorded_at}, using current time")
             actual_recorded_at = datetime.utcnow()

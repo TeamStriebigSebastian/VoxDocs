@@ -1,31 +1,36 @@
-"""Database models for VoxDocs."""
+"""Database models for Platform."""
 
-from app.models.audio import AudioRecording
-from app.models.transcription import Transcription, TranscriptionSegment
-from app.models.classification import Classification
-from app.models.practice import Practice, Room, User
-from app.models.onboarding import OnboardingSession, PhraseRecording
-from app.models.task import Task, TaskPriority, TaskStatus
-from app.models.appointment import Appointment, AppointmentStatus
-from app.models.photo import Photo
-from app.models.nursing_transcription import NursingTranscription, TranscriptionStatus
+from app.models.tenant import Tenant, Group
+from app.models.user import User
+from app.models.user_role import UserGroupRole, UserRole
+from app.models.case import CaseFile, CaseStatus
+from app.models.entry import Entry, AudioStatus
+from app.models.entry_translation import EntryTranslation
+from app.models.task import Task, TaskType, TaskStatus
+from app.models.task_translation import TaskTranslation
+from app.models.category import CategoryDefinition
+from app.models.audit import AuditEvent
+
+# Deprecated / Legacy (Commented out to force breakage/refactor)
+# from app.models.practice import Practice, Room
+# from app.models.appointment import Appointment
+# from app.models.nursing_transcription import NursingTranscription
+# from app.models.audio import AudioRecording
 
 __all__ = [
-    "AudioRecording",
-    "Transcription",
-    "TranscriptionSegment",
-    "Classification",
-    "Practice",
-    "Room",
+    "Tenant",
+    "Group",
     "User",
-    "OnboardingSession",
-    "PhraseRecording",
+    "UserGroupRole",
+    "UserRole",
+    "CaseFile",
+    "CaseStatus",
+    "Entry",
+    "EntryTranslation",
+    "AudioStatus",
     "Task",
-    "TaskPriority",
+    "TaskType",
     "TaskStatus",
-    "Appointment",
-    "AppointmentStatus",
-    "Photo",
-    "NursingTranscription",
-    "TranscriptionStatus",
+    "CategoryDefinition",
+    "AuditEvent",
 ]

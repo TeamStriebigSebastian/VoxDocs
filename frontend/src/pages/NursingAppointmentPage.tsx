@@ -220,7 +220,7 @@ export default function NursingAppointmentPage() {
               value={patientName}
               onChange={(e) => setPatientName(e.target.value)}
               placeholder="Name eingeben..."
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 relative z-10"
               disabled={isRecording}
             />
           </div>
@@ -263,14 +263,12 @@ export default function NursingAppointmentPage() {
               </div>
               <button
                 onClick={() => setPushToTalk(!pushToTalk)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  pushToTalk ? 'bg-primary-600' : 'bg-slate-300'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${pushToTalk ? 'bg-primary-600' : 'bg-slate-300'
+                  }`}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    pushToTalk ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${pushToTalk ? 'translate-x-6' : 'translate-x-1'
+                    }`}
                 />
               </button>
             </div>
@@ -374,7 +372,7 @@ export default function NursingAppointmentPage() {
 
       {/* Fixed bottom button */}
       {(audioRecordings.length > 0 || photos.length > 0) && !isUploading && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg">
+        <div className="fixed bottom-[60px] left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg z-40">
           <div className="max-w-2xl mx-auto">
             <button
               onClick={completeAppointment}

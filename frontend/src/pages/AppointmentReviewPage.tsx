@@ -15,6 +15,9 @@ interface AudioRecording {
 
 interface Transcription {
   status: 'pending' | 'processing' | 'ready' | 'confirmed' | 'error'
+  full_text: string | null
+  translated_text: string | null
+  original_language: string | null
   summary: string | null
   services: string | null
   observations: string | null
@@ -22,6 +25,23 @@ interface Transcription {
   tts_audio_url: string | null
   confirmed_at: string | null
 }
+
+const getLanguageName = (code: string | null) => {
+  if (!code) return 'Unbekannt';
+  const languages: Record<string, string> = {
+    'de': 'Deutsch',
+    'en': 'Englisch',
+    'pl': 'Polnisch',
+    'ro': 'Rumänisch',
+    'tr': 'Türkisch',
+    'ru': 'Russisch',
+    'ar': 'Arabisch',
+    'fr': 'Französisch',
+    'es': 'Spanisch',
+    'it': 'Italienisch'
+  };
+  return languages[code] || code;
+};
 
 interface Appointment {
   uuid: string
@@ -43,6 +63,13 @@ export default function AppointmentReviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    summary: '',
+    services: '',
+    observations: '',
+    next_tasks: ''
+  })
 
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -62,6 +89,14 @@ export default function AppointmentReviewPage() {
 
       const data = await response.json()
       setAppointment(data)
+      if (data.transcription) {
+        setEditForm({
+          summary: data.transcription.summary || '',
+          services: data.transcription.services || '',
+          observations: data.transcription.observations || '',
+          next_tasks: data.transcription.next_tasks || ''
+        })
+      }
       setError(null)
     } catch (err) {
       console.error('Error loading appointment:', err)
@@ -74,18 +109,74 @@ export default function AppointmentReviewPage() {
   const handlePlayTTS = () => {
     if (!audioRef.current) return
 
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      audioRef.current.play()
-      setIsPlaying(true)
+    const playPromise = audioRef.current.play()
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          setIsPlaying(true)
+        })
+        .catch(error => {
+          console.error("Playback failed:", error)
+          setIsPlaying(false)
+          // Don't alert on abort (user clicked pause/stop)
+          if (error.name !== 'AbortError') {
+            alert(`Wiedergabe fehlgeschlagen: ${error.message}`)
+          }
+        })
+    }
+  }
+
+  const handlePauseTTS = () => {
+    if (!audioRef.current) return
+    audioRef.current.pause()
+    setIsPlaying(false)
+  }
+
+  const handleStopTTS = () => {
+    if (!audioRef.current) return
+    audioRef.current.pause()
+    audioRef.current.currentTime = 0
+    setIsPlaying(false)
+  }
+
+  const handleAudioError = (e: any) => {
+    console.error("Audio error:", e)
+    setIsPlaying(false)
+    alert("Audio konnte nicht geladen werden.")
+  }
+
+  const handleSave = async () => {
+    try {
+      setLoading(true)
+      const formData = new FormData()
+      formData.append('summary', editForm.summary)
+      formData.append('services', editForm.services)
+      formData.append('observations', editForm.observations)
+      formData.append('next_tasks', editForm.next_tasks)
+
+      const response = await fetch(`/api/appointments/${appointmentUuid}/transcription`, {
+        method: 'PUT',
+        body: formData,
+      })
+
+      if (!response.ok) throw new Error('Update failed')
+
+      await loadAppointment()
+      setIsEditing(false)
+    } catch (err) {
+      console.error('Error updating:', err)
+      alert('Fehler beim Speichern')
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleConfirm = async () => {
     if (!appointment) return
-
+    if (isEditing) {
+      alert('Bitte zuerst die Änderungen speichern.')
+      return
+    }
     // In a real app, you'd get the caregiver name from auth
     const caregiverName = prompt('Bitte Ihren Namen zur Bestätigung eingeben:')
     if (!caregiverName) return
@@ -158,14 +249,13 @@ export default function AppointmentReviewPage() {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-slate-800">Pflegedokumentation</h1>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              appointment.status === 'confirmed'
-                ? 'bg-green-100 text-green-800'
-                : appointment.status === 'completed'
+            <h1 className="text-2xl font-bold text-slate-800">Eintrag prüfen</h1>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${appointment.status === 'confirmed'
+              ? 'bg-green-100 text-green-800'
+              : appointment.status === 'completed'
                 ? 'bg-blue-100 text-blue-800'
                 : 'bg-yellow-100 text-yellow-800'
-            }`}>
+              }`}>
               {appointment.status === 'confirmed' ? 'Bestätigt' : appointment.status === 'completed' ? 'Abgeschlossen' : 'In Bearbeitung'}
             </span>
           </div>
@@ -183,6 +273,16 @@ export default function AppointmentReviewPage() {
         </div>
 
         {/* Transcription Status */}
+        {transcription && transcription.status === 'pending' && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center">
+            <div className="flex items-center justify-center space-x-3 text-slate-700">
+              <span className="animate-pulse h-3 w-3 bg-slate-400 rounded-full"></span>
+              <span className="font-medium">Aufnahme eingereiht...</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">Warten auf freien Verarbeitungsslot.</p>
+          </div>
+        )}
+
         {transcription && transcription.status === 'processing' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
             <div className="flex items-center justify-center space-x-3 text-blue-700">
@@ -208,6 +308,12 @@ export default function AppointmentReviewPage() {
           </div>
         )}
 
+        {transcription && !['pending', 'processing', 'ready', 'confirmed', 'error'].includes(transcription.status) && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
+            <p className="text-amber-800 font-mono">Unknown Status: {transcription.status}</p>
+          </div>
+        )}
+
         {/* TTS Audio Player */}
         {transcription && transcription.status === 'ready' && transcription.tts_audio_url && (
           <div className="bg-gradient-to-br from-primary-50 to-primary-100 rounded-lg shadow-sm p-6">
@@ -224,30 +330,45 @@ export default function AppointmentReviewPage() {
               onEnded={() => setIsPlaying(false)}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onError={handleAudioError}
+              preload="auto"
               className="hidden"
             />
 
-            <button
-              onClick={handlePlayTTS}
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-4 px-6 rounded-lg flex items-center justify-center space-x-3 transition-colors"
-            >
-              {isPlaying ? (
-                <>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex space-x-2">
+              {!isPlaying ? (
+                <button
+                  onClick={handlePlayTTS}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-sm"
+                >
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  </svg>
+                  <span>Abspielen</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handlePauseTTS}
+                  className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <span>Pause</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Abspielen</span>
-                </>
+                </button>
               )}
-            </button>
+
+              <button
+                onClick={handleStopTTS}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-3 px-4 rounded-lg flex items-center justify-center transition-colors"
+                title="Stopp"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+              </button>
+            </div>
 
             <p className="mt-3 text-center text-sm text-primary-700">
               Die Dokumentation wird vorgelesen mit den Kategorien
@@ -255,11 +376,84 @@ export default function AppointmentReviewPage() {
           </div>
         )}
 
+        {/* Global Edit Button */}
+        {transcription && transcription.status === 'ready' && !transcription.confirmed_at && (
+          <div className="flex justify-end">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Inhalte bearbeiten</span>
+              </button>
+            ) : (
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="btn bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="btn bg-primary-600 text-white hover:bg-primary-700"
+                >
+                  Speichern
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Transcription Categories */}
         {transcription && transcription.status === 'ready' && (
           <div className="space-y-4">
+
+            {/* Original & Translation */}
+            {transcription.full_text && (
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h3 className="font-semibold text-slate-800 flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                    </svg>
+                    <span>Transkription</span>
+                  </h3>
+                  {transcription.original_language && (
+                    <span className="text-xs font-medium px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                      Sprache: {getLanguageName(transcription.original_language)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Original */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Original-Audio Transkript</h4>
+                    <p className="text-slate-600 whitespace-pre-wrap text-sm font-mono bg-slate-50 p-3 rounded border border-slate-100">
+                      {transcription.full_text}
+                    </p>
+                  </div>
+
+                  {/* Translation (if available and different, or if forced) */}
+                  {transcription.translated_text && transcription.translated_text !== transcription.full_text && (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Deutsche Übersetzung</h4>
+                      <p className="text-slate-800 whitespace-pre-wrap text-sm bg-yellow-50 p-3 rounded border border-yellow-100">
+                        {transcription.translated_text}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Zusammenfassung */}
-            {transcription.summary && (
+            {/* Zusammenfassung */}
+            {(transcription.summary || isEditing) && (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start space-x-3">
                   <div className="bg-blue-100 text-blue-600 p-2 rounded-lg">
@@ -269,14 +463,24 @@ export default function AppointmentReviewPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-800 mb-2">Zusammenfassung</h3>
-                    <p className="text-slate-600 whitespace-pre-wrap">{transcription.summary}</p>
+                    {isEditing ? (
+                      <textarea
+                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        rows={4}
+                        value={editForm.summary}
+                        onChange={(e) => setEditForm({ ...editForm, summary: e.target.value })}
+                      />
+                    ) : (
+                      <p className="text-slate-600 whitespace-pre-wrap">{transcription.summary}</p>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Erbrachte Leistungen */}
-            {transcription.services && (
+            {/* Erbrachte Leistungen */}
+            {(transcription.services || isEditing) && (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start space-x-3">
                   <div className="bg-green-100 text-green-600 p-2 rounded-lg">
@@ -286,14 +490,24 @@ export default function AppointmentReviewPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-800 mb-2">Erbrachte Leistungen</h3>
-                    <p className="text-slate-600 whitespace-pre-wrap">{transcription.services}</p>
+                    {isEditing ? (
+                      <textarea
+                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        rows={4}
+                        value={editForm.services}
+                        onChange={(e) => setEditForm({ ...editForm, services: e.target.value })}
+                      />
+                    ) : (
+                      <p className="text-slate-600 whitespace-pre-wrap">{transcription.services}</p>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Besonderheiten */}
-            {transcription.observations && (
+            {/* Besonderheiten */}
+            {(transcription.observations || isEditing) && (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start space-x-3">
                   <div className="bg-yellow-100 text-yellow-600 p-2 rounded-lg">
@@ -303,14 +517,24 @@ export default function AppointmentReviewPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-800 mb-2">Besonderheiten</h3>
-                    <p className="text-slate-600 whitespace-pre-wrap">{transcription.observations}</p>
+                    {isEditing ? (
+                      <textarea
+                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                        rows={4}
+                        value={editForm.observations}
+                        onChange={(e) => setEditForm({ ...editForm, observations: e.target.value })}
+                      />
+                    ) : (
+                      <p className="text-slate-600 whitespace-pre-wrap">{transcription.observations}</p>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
             {/* Aufgaben für nächsten Termin */}
-            {transcription.next_tasks && (
+            {/* Aufgaben für nächsten Termin */}
+            {(transcription.next_tasks || isEditing) && (
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start space-x-3">
                   <div className="bg-purple-100 text-purple-600 p-2 rounded-lg">
@@ -320,7 +544,16 @@ export default function AppointmentReviewPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-800 mb-2">Aufgaben für nächsten Termin</h3>
-                    <p className="text-slate-600 whitespace-pre-wrap">{transcription.next_tasks}</p>
+                    {isEditing ? (
+                      <textarea
+                        className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        rows={4}
+                        value={editForm.next_tasks}
+                        onChange={(e) => setEditForm({ ...editForm, next_tasks: e.target.value })}
+                      />
+                    ) : (
+                      <p className="text-slate-600 whitespace-pre-wrap">{transcription.next_tasks}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -381,7 +614,7 @@ export default function AppointmentReviewPage() {
 
       {/* Fixed bottom confirm button */}
       {transcription && transcription.status === 'ready' && !transcription.confirmed_at && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-lg mb-20 z-10">
           <div className="max-w-3xl mx-auto">
             <button
               onClick={handleConfirm}

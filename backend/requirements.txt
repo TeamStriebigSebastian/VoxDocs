@@ -13,21 +13,23 @@ soundfile==0.12.1
 pydub==0.25.1
 
 # Machine Learning
-torch==2.1.2
-transformers==4.36.2
-numpy==1.26.3
+torch>=2.1.0
+transformers>=4.36.0
+numpy>=1.26.0
 
 # LLM for text correction and task extraction
-openai==1.12.0
-ollama==0.4.7
+openai>=1.12.0
+ollama>=0.1.0
 
 # TTS (Text-to-Speech)
-piper-tts==1.2.0
+# piper-tts==1.2.0
 
 # Encryption and security
 cryptography==41.0.7
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+email-validator>=2.1.0
 
 # Database
 sqlalchemy==2.0.25
@@ -55,3 +57,4 @@ pytest-cov==4.1.0
 
 # Logging
 loguru==0.7.2
+aiohttp

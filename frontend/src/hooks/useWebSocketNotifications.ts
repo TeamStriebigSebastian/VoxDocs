@@ -13,7 +13,12 @@ export function useWebSocketNotifications(onNotification?: NotificationCallback)
   const wsRef = useRef<WebSocket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const reconnectTimeoutRef = useRef<number>()
+  const onNotificationRef = useRef(onNotification)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    onNotificationRef.current = onNotification
+  }, [onNotification])
 
   useEffect(() => {
     connectWebSocket()
@@ -63,7 +68,7 @@ export function useWebSocketNotifications(onNotification?: NotificationCallback)
 
           if (data.type === 'transcription_ready') {
             console.log('Transcription ready notification received:', data)
-            onNotification?.(data)
+            onNotificationRef.current?.(data)
           } else if (data.type === 'pong') {
             // Heartbeat response
             console.log('Heartbeat pong received')

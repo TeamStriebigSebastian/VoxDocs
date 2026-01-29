@@ -4,6 +4,7 @@
 
 import { audioApi, onboardingApi } from './api'
 import { offlineStorage } from './offlineStorage'
+import { db, SyncQueueItem } from '../db'
 
 type SyncStatus = 'idle' | 'syncing' | 'error'
 type SyncListener = (status: SyncStatus, pending: { recordings: number; phrases: number }) => void
@@ -47,7 +48,7 @@ class SyncService {
   }
 
   private startPeriodicSync() {
-    // Check every 30 seconds for pending uploads
+    // Check every 30 seconds for pending uploads to ensure nothing stuck
     this.syncInterval = window.setInterval(() => {
       if (this.isOnline && !this.isSyncing) {
         this.sync()
@@ -66,6 +67,7 @@ class SyncService {
     this.listeners.forEach(listener => listener(status, pending))
   }
 
+  // Main Sync Entrypoint
   async sync(): Promise<void> {
     if (!this.isOnline || this.isSyncing) return
 
@@ -73,11 +75,14 @@ class SyncService {
     await this.notifyListeners('syncing')
 
     try {
-      // Sync recordings
+      // Sync legacy recordings
       await this.syncRecordings()
 
       // Sync phrase recordings
       await this.syncPhrases()
+
+      // Sync Generic Platform Data (Queue)
+      await this.processSyncQueue()
 
       await this.notifyListeners('idle')
     } catch (error) {
@@ -87,6 +92,98 @@ class SyncService {
       this.isSyncing = false
     }
   }
+
+  // --- Auth Helper ---
+  private getAuthHeaders(): HeadersInit {
+    const token = localStorage.getItem('access_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+  }
+
+  // --- Generic Platform Sync ---
+  private async processSyncQueue() {
+    const queueItems = await db.syncQueue.orderBy('created_at').toArray();
+
+    for (const item of queueItems) {
+      try {
+        if (item.type === 'entry' && item.action === 'create') {
+          await this.syncEntry(item);
+        } else if (item.type === 'task') {
+          await this.syncTask(item);
+        }
+        // Remove from queue on success
+        if (item.id) await db.syncQueue.delete(item.id);
+      } catch (error) {
+        console.error('Failed to process sync item:', item, error);
+      }
+    }
+  }
+
+  private async syncEntry(item: SyncQueueItem) {
+    const localEntry = item.payload as any; // Cast to LocalEntry
+    const formData = new FormData();
+    formData.append('case_uuid', localEntry.case_uuid);
+    formData.append('text', localEntry.text || '');
+    if (localEntry.category_id) formData.append('category_id', String(localEntry.category_id));
+    if (localEntry.parent_entry_id) formData.append('parent_entry_id', String(localEntry.parent_entry_id));
+
+    // Handle blobs
+    if (localEntry.pendingAudioBlob) {
+      formData.append('audio_file', localEntry.pendingAudioBlob, 'audio.wav');
+    }
+
+    const res = await fetch('/api/entries/', {
+      method: 'POST',
+      headers: this.getAuthHeaders(), // No Content-Type for FormData
+      body: formData
+    });
+
+    if (!res.ok) throw new Error('Failed to sync entry');
+
+    // Update local entry with server data (mark synced)
+    const existing = await db.entries.where('uuid').equals(localEntry.uuid).first();
+    if (existing && existing.id) {
+      await db.entries.update(existing.id, {
+        ...existing,
+        synced: true,
+        pendingAudioBlob: undefined,
+        pendingImageBlob: undefined
+      });
+    }
+  }
+
+  private async syncTask(item: SyncQueueItem) {
+    const localTask = item.payload as any;
+
+    if (item.action === 'create') {
+      const res = await fetch('/api/tasks/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders()
+        },
+        body: JSON.stringify({
+          case_uuid: localTask.case_uuid,
+          title: localTask.title,
+          task_type: localTask.task_type || 'one_shot'
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to sync task');
+
+      const serverTask = await res.json();
+
+      // Update local task
+      const existing = await db.tasks.where('case_uuid').equals(localTask.case_uuid).filter(t => t.title === localTask.title).first();
+      if (existing && existing.id) {
+        await db.tasks.update(existing.id, {
+          server_id: serverTask.id,
+          synced: true
+        });
+      }
+    }
+  }
+
+  // --- Legacy Sync Methods ---
 
   private async syncRecordings(): Promise<void> {
     const pendingRecordings = await offlineStorage.getPendingRecordings()

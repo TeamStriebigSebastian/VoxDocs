@@ -1,85 +1,59 @@
 import { useNavigate } from 'react-router-dom'
-import { Mic, Heart } from 'lucide-react'
+import { Folder, Key, Settings } from 'lucide-react'
 
 export default function HomePage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-12 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4 flex items-center justify-center">
+      <div className="max-w-2xl w-full">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            VoxDocs
+          <h1 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
+            VoxDocs Platform
           </h1>
-          <p className="text-xl text-gray-600">
-            Sprachgesteuerte Dokumentation für Gesundheitsberufe
+          <p className="text-xl text-slate-600 mb-8">
+            Generic Documentation Engine Core
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Dental Documentation Card */}
-          <div
-            onClick={() => navigate('/dental')}
-            className="bg-white rounded-2xl shadow-xl p-8 cursor-pointer transform transition-all hover:scale-105 hover:shadow-2xl border-2 border-transparent hover:border-blue-500"
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-                <Mic className="w-10 h-10 text-blue-600" />
+        <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-slate-800 mb-4">
+              Welcome
+            </h2>
+            <p className="text-slate-600 mb-6">
+              You are running the generic platform core. This environment is configured for:
+            </p>
+
+            <div className="bg-slate-50 rounded-lg p-4 mb-6 border border-slate-200">
+              <div className="flex items-center gap-3 mb-2">
+                <Key className="w-5 h-5 text-slate-400" />
+                <span className="font-medium text-slate-700">Tenant:</span>
+                <span className="text-slate-900">Default Tenant (Self-Hosted)</span>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Zahnarzt Dokumentation
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Sprachgesteuerte Behandlungsdokumentation für Zahnarztpraxen.
-                Schnelle Erfassung nach jedem Termin.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                  Spracherkennung
-                </span>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                  Behandlungsraum
-                </span>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                  Training
-                </span>
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-slate-400" />
+                <span className="font-medium text-slate-700">Configuration:</span>
+                <span className="text-slate-900">Generic Case Management</span>
               </div>
             </div>
+
+            <p className="text-sm text-slate-500 mb-8">
+              Manage generic case files, configurable entries, and tasks without domain-specific constraints.
+            </p>
           </div>
 
-          {/* Nursing Care Documentation Card */}
-          <div
-            onClick={() => navigate('/nursing/appointment')}
-            className="bg-white rounded-2xl shadow-xl p-8 cursor-pointer transform transition-all hover:scale-105 hover:shadow-2xl border-2 border-transparent hover:border-green-500"
+          <button
+            onClick={() => navigate('/platform/cases')}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-transform transform active:scale-95 flex items-center justify-center gap-3"
           >
-            <div className="flex flex-col items-center text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-                <Heart className="w-10 h-10 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Pflegedienst Dokumentation
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Multilinguale Dokumentation für ambulante Pflegedienste.
-                Sprachaufnahmen in beliebiger Sprache, Ausgabe auf Deutsch.
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                  Multilingual
-                </span>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                  Foto + Audio
-                </span>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
-                  TTS Vorlesung
-                </span>
-              </div>
-            </div>
-          </div>
+            <Folder className="w-6 h-6" />
+            <span>Open Case Management</span>
+          </button>
         </div>
 
-        <div className="mt-12 text-center text-gray-500 text-sm">
-          <p>🔒 100% lokal • DSGVO-konform • Keine Cloud</p>
+        <div className="mt-12 text-center text-slate-400 text-sm">
+          <p>VoxDocs Generic Core • v0.1.0-platform</p>
         </div>
       </div>
     </div>

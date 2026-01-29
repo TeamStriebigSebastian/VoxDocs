@@ -9,7 +9,7 @@ from loguru import logger
 import json
 
 
-router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 # Store active WebSocket connections

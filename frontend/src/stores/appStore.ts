@@ -15,7 +15,10 @@ interface AppState {
 
   // User settings
   userId: number | null
-  userName: string
+  userName: string | null
+  userRole: string | null
+  userLanguage: string
+  token: string | null
 
   // Recording settings
   processImmediately: boolean
@@ -25,7 +28,9 @@ interface AppState {
   setPractice: (id: number, name: string) => void
   setRooms: (rooms: Room[]) => void
   setSelectedRoom: (roomId: number | null) => void
-  setUser: (id: number, name: string) => void
+  setUserInfo: (id: number, name: string, role: string, language: string) => void
+  setToken: (token: string | null) => void
+  logout: () => void
   setProcessImmediately: (value: boolean) => void
   setPushToTalk: (value: boolean) => void
 }
@@ -42,8 +47,11 @@ export const useAppStore = create<AppState>()(
         { id: 3, name: 'Behandlungsraum 3' },
       ],
       selectedRoomId: 1,
-      userId: 1,
-      userName: 'Dr. Demo',
+      userId: null,
+      userName: null,
+      userRole: null,
+      userLanguage: 'de',
+      token: null,
       processImmediately: false,
       pushToTalk: false,  // Default: toggle mode (click to start/stop)
 
@@ -51,7 +59,19 @@ export const useAppStore = create<AppState>()(
       setPractice: (id, name) => set({ practiceId: id, practiceName: name }),
       setRooms: (rooms) => set({ rooms }),
       setSelectedRoom: (roomId) => set({ selectedRoomId: roomId }),
-      setUser: (id, name) => set({ userId: id, userName: name }),
+      setUserInfo: (id, name, role, language) => set({
+        userId: id,
+        userName: name,
+        userRole: role,
+        userLanguage: language
+      }),
+      setToken: (token) => set({ token }),
+      logout: () => set({
+        userId: null,
+        userName: null,
+        userRole: null,
+        token: null
+      }),
       setProcessImmediately: (value) => set({ processImmediately: value }),
       setPushToTalk: (value) => set({ pushToTalk: value }),
     }),

@@ -30,6 +30,8 @@ class NursingTranscription(Base):
     # Raw transcription
     full_text = Column(Text, nullable=False)
     language = Column(String(10), default="de")
+    original_language = Column(String(10))
+    translated_text = Column(Text)
 
     # Nursing care categories
     summary = Column(Text)  # Gesamte Aufnahme/Zusammenfassung
