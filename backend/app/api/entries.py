@@ -5,6 +5,7 @@ import os
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
@@ -83,6 +84,7 @@ async def create_entry(
     structured_data: str = Form("{}"), # JSON string
     parent_entry_id: Optional[int] = Form(None),
     audio_file: Optional[UploadFile] = File(None),
+    image_file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -129,9 +131,8 @@ async def create_entry(
             file_ext = os.path.splitext(audio_file.filename)[1] or ".wav"
             filename = f"{uuid.uuid4()}{file_ext}"
             
-            # Ensure storage dir exists (using settings or default)
-            # Default to /app/storage/encrypted per requirements
-            upload_dir = "/app/storage/encrypted"
+            # Ensure storage dir exists (using settings)
+            upload_dir = settings.ENCRYPTED_DIR
             os.makedirs(upload_dir, exist_ok=True)
             
             file_path = os.path.join(upload_dir, filename)
@@ -143,6 +144,22 @@ async def create_entry(
             audio_key = filename
             audio_status = AudioStatus.PENDING # Trigger for STT
 
+        # Handle Image Upload
+        image_key = None
+        if image_file:
+            file_ext = os.path.splitext(image_file.filename)[1] or ".jpg"
+            filename = f"{uuid.uuid4()}{file_ext}"
+            
+            upload_dir = settings.ENCRYPTED_DIR
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            file_path = os.path.join(upload_dir, filename)
+            
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(image_file.file, buffer)
+            
+            image_key = filename
+
         new_entry = Entry(
             uuid=str(uuid.uuid4()),
             case_id=case.id,
@@ -152,6 +169,7 @@ async def create_entry(
             structured_data=data_dict,
             audio_object_key=audio_key,
             audio_status=audio_status,
+            image_object_key=image_key,
             version=1,
             parent_entry_id=parent_entry_id,
             created_at=datetime.utcnow()
@@ -180,3 +198,58 @@ async def create_entry(
         logger.error(f"Error creating entry: {e}")
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{entry_uuid}/image")
+async def get_entry_image(
+    entry_uuid: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Serve the image file for an entry."""
+    entry = await get_entry_and_verify_access(entry_uuid, current_user, db)
+    
+    if not entry.image_object_key:
+        raise HTTPException(status_code=404, detail="No image attached to this entry")
+        
+    file_path = settings.ENCRYPTED_DIR / entry.image_object_key
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Image file not found on server")
+        
+    return FileResponse(file_path, media_type="image/jpeg")
+
+@router.get("/{entry_uuid}/audio")
+async def get_entry_audio(
+    entry_uuid: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Serve the audio file for an entry."""
+    entry = await get_entry_and_verify_access(entry_uuid, current_user, db)
+    
+    if not entry.audio_object_key:
+        raise HTTPException(status_code=404, detail="No audio attached to this entry")
+        
+    file_path = settings.ENCRYPTED_DIR / entry.audio_object_key
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found on server")
+        
+    return FileResponse(file_path, media_type="audio/wav")
+
+async def get_entry_and_verify_access(entry_uuid: str, current_user: User, db: AsyncSession) -> Entry:
+    """Helper to fetch entry and verify user access."""
+    # Fetch entry with case loaded
+    result = await db.execute(
+        select(Entry).options(selectinload(Entry.case_file)).where(Entry.uuid == entry_uuid)
+    )
+    entry = result.scalar_one_or_none()
+    
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+        
+    # Verify Access
+    # Check if user has role in case.group_id
+    user_group_ids = [gr.group_id for gr in current_user.group_roles]
+    if entry.case_file.group_id not in user_group_ids:
+        raise HTTPException(status_code=403, detail="No access to this case")
+        
+    return entry

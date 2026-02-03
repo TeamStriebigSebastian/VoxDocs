@@ -9,6 +9,7 @@ import { db, LocalEntry, LocalTask, generateLocalUUID } from '../db'
 import { syncService } from '../services/syncService'
 import { useAuth } from '../contexts/AuthContext'
 import { authService, User } from '../services/authService'
+import { ImageAnnotationModal } from '../components/ImageAnnotationModal'
 
 interface Category {
     id: number
@@ -16,10 +17,44 @@ interface Category {
 }
 
 // Type alias for local entries displayed in the timeline
-// Type alias for local entries displayed in the timeline
 type Entry = LocalEntry
 
-// Translation View removed (replaced by inline logic)
+// Secure Image Component to fetch protected images
+const SecureImage = ({ entryUuid, className, pendingBlob }: { entryUuid: string, className?: string, pendingBlob?: Blob }) => {
+    const { accessToken } = useAuth()
+    const [src, setSrc] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (pendingBlob) {
+            setSrc(URL.createObjectURL(pendingBlob))
+            return
+        }
+
+        let active = true
+        if (accessToken) {
+            fetch(`/api/entries/${entryUuid}/image`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            })
+                .then(res => {
+                    if (res.ok) return res.blob()
+                    throw new Error('Failed to load image')
+                })
+                .then(blob => {
+                    if (active) setSrc(URL.createObjectURL(blob))
+                })
+                .catch(() => { /* ignore */ })
+        }
+        return () => { active = false }
+    }, [entryUuid, accessToken, pendingBlob])
+
+    if (!src) return (
+        <div className={`flex items-center justify-center text-slate-300 bg-slate-100 ${className}`}>
+            <ImageIcon className="w-8 h-8 opacity-50" />
+        </div>
+    )
+
+    return <img src={src} className={`${className} object-cover`} alt="" />
+}
 
 export default function CaseDetailPage() {
     const { uuid } = useParams()
@@ -115,11 +150,17 @@ export default function CaseDetailPage() {
     const [imageFile, setImageFile] = useState<File | null>(null)
     const [parentEntryId, setParentEntryId] = useState<number | null>(null)
 
+    // Annotation / Attachment State
+    const [annotationFile, setAnnotationFile] = useState<File | null>(null)
+    const [isAnnotationOpen, setIsAnnotationOpen] = useState(false)
+    const [attachmentParentId, setAttachmentParentId] = useState<number | null>(null)
+
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [showTextInput, setShowTextInput] = useState(false)
 
     // Refs
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const attachmentInputRef = useRef<HTMLInputElement>(null)
 
     // Task Creation
     const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -316,7 +357,7 @@ export default function CaseDetailPage() {
     }
 
     // Voice Handling with Offline Support
-    const handleVoiceUpload = async (file: File) => {
+    const handleVoiceUpload = async (file: File, parentId?: number) => {
         if (!caseFile) return
 
         try {
@@ -336,6 +377,8 @@ export default function CaseDetailPage() {
                 author_id: 0,
                 synced: false,
                 pendingAudioBlob: audioBlob,
+                parent_entry_id: parentId || undefined,
+                structured_data: parentId ? { is_attachment: true } : {}
             }
 
             await db.entries.add(localEntry)
@@ -356,6 +399,62 @@ export default function CaseDetailPage() {
             console.error('Error uploading voice entry:', error)
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    // Attachment Handlers
+    const handleAttachmentClick = (parentId: number) => {
+        setAttachmentParentId(parentId)
+        attachmentInputRef.current?.click()
+    }
+
+    const handleAttachmentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setAnnotationFile(e.target.files[0])
+            setIsAnnotationOpen(true)
+            e.target.value = '' // reset
+        }
+    }
+
+    const handleSaveAnnotation = async (blob: Blob) => {
+        if (!attachmentParentId || !caseFile) return
+
+        try {
+            setIsSubmitting(true)
+            // const file = new File([blob], "annotation.jpg", { type: "image/jpeg" }) // Unused
+
+            const localEntry: LocalEntry = {
+                uuid: generateLocalUUID(),
+                case_uuid: caseFile.uuid,
+                text: '',
+                created_at: new Date().toISOString(),
+                has_audio: false,
+                has_image: true,
+                category_id: null,
+                author_id: 0,
+                synced: false,
+                pendingImageBlob: blob,
+                parent_entry_id: attachmentParentId,
+                structured_data: { is_attachment: true }
+            }
+
+            await db.entries.add(localEntry)
+
+            await db.syncQueue.add({
+                type: 'entry',
+                action: 'create',
+                payload: localEntry,
+                created_at: Date.now(),
+                retries: 0,
+            })
+
+            syncService.sync()
+
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setIsSubmitting(false)
+            setAttachmentParentId(null)
         }
     }
 
@@ -573,30 +672,57 @@ export default function CaseDetailPage() {
                                 <p>Noch keine Einträge vorhanden.</p>
                             </div>
                         ) : (
-                            entries.map((entry: Entry) => {
-                                const category = categories.find((c: Category) => c.id === entry.category_id)
-                                return (
-                                    <div key={entry.id} className="bg-white rounded-lg shadow-sm p-5 border border-slate-100">
-                                        <div className={`flex justify-between items-start mb-3 ${entry.parent_entry_id ? 'ml-8 pl-4 border-l-2 border-blue-100' : ''}`}>
-                                            <div className="flex items-center space-x-2">
-                                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
-                                                    {entry.author_id}
+                            (() => {
+                                // Grouping Logic: Tree Structure
+                                const rootEntries = entries.filter(e => !e.parent_entry_id)
+
+                                return rootEntries.map((entry: Entry) => {
+                                    const category = categories.find((c: Category) => c.id === entry.category_id)
+                                    const children = entries.filter(e => e.parent_entry_id === entry.id)
+
+                                    // Separate attachments from replies (logic: attachments have is_attachment=true OR depends on implementation)
+                                    // For now, let's treat media-only children and explicitly flagged ones as attachments
+                                    // Make sure we check structured_data existence
+                                    const attachments = children.filter(c => c.structured_data?.is_attachment || (c.has_image && !c.text) || (c.has_audio && !c.text))
+                                    // Replies are the rest
+                                    const replies = children.filter(c => !attachments.includes(c))
+
+                                    return (
+                                        <div key={entry.id} className="bg-white rounded-lg shadow-sm p-5 border border-slate-100 relative group">
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex items-center space-x-2">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                                                        {entry.author_id}
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium text-slate-700 leading-none">
+                                                            User {entry.author_id}
+                                                        </span>
+                                                        <span className="text-xs text-slate-400 mt-0.5">{new Date(entry.created_at).toLocaleString('de-DE')}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium text-slate-700 leading-none">
-                                                        {entry.parent_entry_id && <span className="text-blue-500 mr-1 text-xs">↳</span>}
-                                                        User {entry.author_id}
-                                                    </span>
-                                                    <span className="text-xs text-slate-400 mt-0.5">{new Date(entry.created_at).toLocaleString('de-DE')}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                {category && (
-                                                    <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-blue-200">
-                                                        {category.name}
-                                                    </span>
-                                                )}
-                                                {!entry.parent_entry_id && (
+                                                <div className="flex items-center space-x-2">
+                                                    {category && (
+                                                        <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded border border-blue-200">
+                                                            {category.name}
+                                                        </span>
+                                                    )}
+
+                                                    {/* Action Buttons */}
+                                                    <div className="flex space-x-1 opacity-10 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (entry.id) handleAttachmentClick(entry.id);
+                                                            }}
+                                                            className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600"
+                                                            title="Foto anhängen"
+                                                        >
+                                                            <Camera className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+
                                                     <button
                                                         onClick={() => {
                                                             if (entry.id) {
@@ -606,113 +732,164 @@ export default function CaseDetailPage() {
                                                         }}
                                                         className="text-xs text-slate-400 hover:text-blue-600 px-2 py-1 rounded bg-slate-50 border border-slate-100"
                                                     >
-                                                        Korrektur / Antwort
+                                                        Antworten
                                                     </button>
-                                                )}
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        <div className={`pl-10 ${entry.parent_entry_id ? 'ml-8' : ''}`}>
-                                            {entry.text && (
-                                                <div className="mb-3 space-y-3">
-                                                    {/* Primary/Original Text */}
-                                                    {/* Primary/Original Text */}
-                                                    <div className="text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                            <div className="pl-10">
+                                                {/* Text Content */}
+                                                {entry.text && (
+                                                    <div className="mb-3 space-y-3">
+                                                        {/* Primary/Original Text */}
+                                                        <div className="text-slate-800 whitespace-pre-wrap leading-relaxed">
+                                                            {(() => {
+                                                                const snippet = entry.structured_data?.highlight_snippet
+                                                                if (snippet && entry.text.includes(snippet)) {
+                                                                    const parts = entry.text.split(snippet)
+                                                                    return (
+                                                                        <>
+                                                                            {parts.map((part, i) => (
+                                                                                <span key={i}>
+                                                                                    {part}
+                                                                                    {i < parts.length - 1 && (
+                                                                                        <span className="bg-yellow-100 px-1 rounded mx-0.5">{snippet}</span>
+                                                                                    )}
+                                                                                </span>
+                                                                            ))}
+                                                                        </>
+                                                                    )
+                                                                }
+                                                                return entry.text
+                                                            })()}
+                                                        </div>
+
+                                                        {/* Translations Logic */}
                                                         {(() => {
-                                                            const snippet = entry.structured_data?.highlight_snippet
-                                                            if (snippet && entry.text.includes(snippet)) {
-                                                                const parts = entry.text.split(snippet)
-                                                                return (
-                                                                    <>
-                                                                        {parts.map((part, i) => (
-                                                                            <span key={i}>
-                                                                                {part}
-                                                                                {i < parts.length - 1 && (
-                                                                                    <span className="bg-yellow-100 px-1 rounded mx-0.5">{snippet}</span>
-                                                                                )}
-                                                                            </span>
-                                                                        ))}
-                                                                    </>
-                                                                )
-                                                            }
-                                                            return entry.text
+                                                            const userLang = currentUser?.preferred_language || 'de'
+                                                            const serverLang = serverDefaultLang || 'de'
+                                                            const getTrans = (lang: string) => entry.translations?.find(t => t.language_code === lang)?.translated_text
+                                                            const userTrans = getTrans(userLang)
+                                                            const serverTrans = getTrans(serverLang)
+                                                            const displays = []
+                                                            if (userTrans) displays.push({ lang: userLang, text: userTrans })
+                                                            if (serverTrans && serverTrans !== userTrans && serverLang !== userLang) displays.push({ lang: serverLang, text: serverTrans })
+
+                                                            return displays.map((d, i) => (
+                                                                <div key={i} className="pt-2 border-t border-slate-100/50">
+                                                                    <div className="flex items-center space-x-2 mb-1">
+                                                                        <Globe className="w-3 h-3 text-blue-400" />
+                                                                        <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
+                                                                            {d.lang.toUpperCase()}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <p
+                                                                        className="text-slate-600 text-[14px] leading-relaxed italic [&>mark]:bg-yellow-100 [&>mark]:px-1 [&>mark]:rounded [&>mark]:mx-0.5"
+                                                                        dangerouslySetInnerHTML={{
+                                                                            __html: d.text
+                                                                                .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                                                                                .replace(/&lt;mark&gt;/gi, '<mark>')
+                                                                                .replace(/&lt;\/mark&gt;/gi, '</mark>')
+                                                                        }}
+                                                                    />
+                                                                </div>
+                                                            ))
                                                         })()}
                                                     </div>
+                                                )}
 
-                                                    {/* Translations */}
-                                                    {(() => {
-                                                        const userLang = currentUser?.preferred_language || 'de'
-                                                        const serverLang = serverDefaultLang || 'de'
-
-                                                        // Helper to find translation
-                                                        const getTrans = (lang: string) => entry.translations?.find(t => t.language_code === lang)?.translated_text
-
-                                                        const userTrans = getTrans(userLang)
-                                                        const serverTrans = getTrans(serverLang)
-
-                                                        // We want to show unique translations separate from original.
-                                                        // If original is already in User Lang, don't show User Trans.
-                                                        // But we don't strictly know original lang. 
-                                                        // However, if we HAVE a translation, it implies original was different (usually).
-
-                                                        // Display User Translation if exists
-                                                        // Display Server Translation if exists AND different from User Trans
-
-                                                        const displays = []
-                                                        if (userTrans) displays.push({ lang: userLang, text: userTrans })
-                                                        if (serverTrans && serverTrans !== userTrans && serverLang !== userLang) displays.push({ lang: serverLang, text: serverTrans })
-
-                                                        return displays.map((d, i) => (
-                                                            <div key={i} className="pt-2 border-t border-slate-100/50">
-                                                                <div className="flex items-center space-x-2 mb-1">
-                                                                    <Globe className="w-3 h-3 text-blue-400" />
-                                                                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
-                                                                        {d.lang.toUpperCase()}
-                                                                    </span>
-                                                                </div>
-                                                                {/* Render with potential HTML mark tags */}
-                                                                <p
-                                                                    className="text-slate-600 text-[14px] leading-relaxed italic [&>mark]:bg-yellow-100 [&>mark]:px-1 [&>mark]:rounded [&>mark]:mx-0.5"
-                                                                    dangerouslySetInnerHTML={{
-                                                                        __html: d.text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                                                                            .replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>')
-                                                                    }}
-                                                                />
+                                                {/* Main Entry Media */}
+                                                {entry.has_audio && (
+                                                    <div className="inline-flex items-center space-x-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 mb-2">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${entry.text ? 'bg-green-100' : 'bg-blue-100'}`}>
+                                                            <Mic className={`w-4 h-4 ${entry.text ? 'text-green-600' : 'text-blue-600'}`} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium text-slate-700">Audio-Notiz</div>
+                                                            <div className="text-xs text-slate-500">
+                                                                {entry.text ? 'Transkription abgeschlossen' : 'Transkription ausstehend...'}
                                                             </div>
-                                                        ))
-                                                    })()}
-                                                </div>
-                                            )}
-
-                                            {entry.has_audio && (
-                                                <div className="inline-flex items-center space-x-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 mb-2">
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${entry.text ? 'bg-green-100' : 'bg-blue-100'}`}>
-                                                        <Mic className={`w-4 h-4 ${entry.text ? 'text-green-600' : 'text-blue-600'}`} />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm font-medium text-slate-700">Audio-Notiz</div>
-                                                        <div className="text-xs text-slate-500">
-                                                            {entry.text ? 'Transkription abgeschlossen' : 'Transkription ausstehend...'}
                                                         </div>
                                                     </div>
-                                                </div>
-                                            )}
+                                                )}
 
-                                            {entry.has_image && (
-                                                <div className="inline-flex items-center space-x-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-                                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                                        <ImageIcon className="w-4 h-4 text-green-600" />
+                                                {entry.has_image && (
+                                                    <div className="inline-flex items-center space-x-3 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                                            <ImageIcon className="w-4 h-4 text-green-600" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm font-medium text-slate-700">Foto aufgenommen</div>
+                                                            <div className="text-xs text-slate-500">Bild gespeichert</div>
+                                                        </div>
+                                                        <div className="flex-1" />
+                                                        {/* Main Entry Image Display using SecureImage */}
+                                                        <div className="h-10 w-10 relative rounded overflow-hidden border border-slate-200">
+                                                            <SecureImage
+                                                                entryUuid={entry.uuid}
+                                                                pendingBlob={entry.pendingImageBlob}
+                                                                className="absolute inset-0 w-full h-full"
+                                                            />
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <div className="text-sm font-medium text-slate-700">Foto aufgenommen</div>
-                                                        <div className="text-xs text-slate-500">Bild gespeichert</div>
+                                                )}
+
+                                                {/* Visual Attachments Grid (Children) */}
+                                                {attachments.length > 0 && (
+                                                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                        {attachments.map(att => (
+                                                            <div key={att.id} className="relative aspect-square bg-slate-100 rounded-lg overflow-hidden border border-slate-200 group/att">
+                                                                {att.has_image ? (
+                                                                    <div className="w-full h-full flex items-center justify-center text-slate-400 bg-black/5">
+                                                                        <SecureImage
+                                                                            entryUuid={att.uuid}
+                                                                            pendingBlob={att.pendingImageBlob}
+                                                                            className="absolute inset-0 w-full h-full"
+                                                                        />
+                                                                    </div>
+                                                                ) : att.has_audio ? (
+                                                                    <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50 text-blue-400">
+                                                                        <Mic className="w-8 h-8" />
+                                                                        <span className="text-xs mt-1">Audio</span>
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                </div>
-                                            )}
+                                                )}
+
+                                                {/* Text Replies (Threaded) */}
+                                                {replies.length > 0 && (
+                                                    <div className="mt-4 space-y-3 pl-4 border-l-2 border-slate-100">
+                                                        {replies.map(reply => (
+                                                            <div key={reply.id} className="bg-slate-50 p-3 rounded-lg text-sm text-slate-700 border border-slate-200">
+                                                                <div className="flex items-center space-x-2 mb-1">
+                                                                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                                                                        {reply.author_id}
+                                                                    </div>
+                                                                    <span className="font-semibold text-xs text-slate-600">User {reply.author_id}</span>
+                                                                    <span className="text-[10px] text-slate-400">{new Date(reply.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                                </div>
+                                                                <div className="text-slate-800">{reply.text}</div>
+
+                                                                {/* Audio reply indicator */}
+                                                                {reply.has_audio && (
+                                                                    <div className="mt-2 flex items-center space-x-2 text-blue-600 text-xs bg-blue-50 p-1.5 rounded w-fit">
+                                                                        <Mic className="w-3 h-3" />
+                                                                        <span>Audio-Notiz</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                            </div>
                                         </div>
-                                    </div>
-                                )
-                            })
+                                    )
+                                })
+                            })()
                         )}
                     </div>
                     {/* Load More Button */}
@@ -749,6 +926,22 @@ export default function CaseDetailPage() {
                             ref={fileInputRef}
                             onChange={handleImageSelect}
                             className="hidden"
+                        />
+                        {/* Hidden Attachment Input */}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            ref={attachmentInputRef}
+                            onChange={handleAttachmentSelect}
+                            className="hidden"
+                        />
+
+                        {/* Annotation Modal */}
+                        <ImageAnnotationModal
+                            isOpen={isAnnotationOpen}
+                            imageFile={annotationFile}
+                            onClose={() => setIsAnnotationOpen(false)}
+                            onSave={handleSaveAnnotation}
                         />
 
                         {(imageFile || showTextInput) ? (

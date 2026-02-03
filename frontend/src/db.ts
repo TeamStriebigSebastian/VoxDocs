@@ -27,6 +27,7 @@ export interface LocalEntry {
     pendingAudioBlob?: Blob
     pendingImageBlob?: Blob
     translations?: { language_code: string, translated_text: string }[]
+    structured_data?: any
 }
 
 export interface LocalTask {

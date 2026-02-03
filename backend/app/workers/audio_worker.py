@@ -7,6 +7,7 @@ from app.core.database import async_session_maker
 from app.models.entry import Entry, AudioStatus
 from app.core.audio import transcribe_audio_file
 from app.core.config import settings
+from app.core.llm import llm_client
 
 # Global running flag
 RUNNING = True

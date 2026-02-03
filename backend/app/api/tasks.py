@@ -82,6 +82,10 @@ async def create_task(
         await db.commit()
         await db.refresh(new_task)
         
+        # Explicitly set empty translations to avoid MissingGreenlet on response serialization
+        # or we could reload with selectinload, but that's an extra query for nothing.
+        new_task.translations = []
+        
         return new_task
 
     except HTTPException:
@@ -125,7 +129,11 @@ async def update_task_status(
 ):
     """Update task status (e.g. complete)."""
     try:
-        task = await db.get(Task, task_id)
+        # Eager load translations to avoid MissingGreenlet
+        query = select(Task).options(selectinload(Task.translations)).where(Task.id == task_id)
+        result = await db.execute(query)
+        task = result.scalar_one_or_none()
+        
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
             

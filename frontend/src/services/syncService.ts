@@ -126,9 +126,18 @@ class SyncService {
     if (localEntry.category_id) formData.append('category_id', String(localEntry.category_id));
     if (localEntry.parent_entry_id) formData.append('parent_entry_id', String(localEntry.parent_entry_id));
 
+    // structured_data MUST be a JSON string
+    if (localEntry.structured_data) {
+      formData.append('structured_data', JSON.stringify(localEntry.structured_data));
+    }
+
     // Handle blobs
     if (localEntry.pendingAudioBlob) {
       formData.append('audio_file', localEntry.pendingAudioBlob, 'audio.wav');
+    }
+    if (localEntry.pendingImageBlob) {
+      // Use proper extension if possible, default to jpg
+      formData.append('image_file', localEntry.pendingImageBlob, 'image.jpg');
     }
 
     const res = await fetch('/api/entries/', {

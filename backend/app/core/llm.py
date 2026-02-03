@@ -89,11 +89,12 @@ Return a valid JSON object with:
         if not text:
             return ""
             
-        highlight_instr = ""
         if highlight_phrase:
             highlight_instr = f"""
 IMPORTANT: The phrase "{highlight_phrase}" is highlighted in the source text.
 You MUST identify the corresponding phrase in the translation and wrap it in <mark> tags.
+Ensure the <mark> tags are placed NATURALLY within the translated sentence.
+DO NOT append the highlighted phrase at the end.
 Example: if source is "Review the <mark>blue door</mark>" and target is German, output "Prüfen Sie die <mark>blaue Tür</mark>".
 """
 
