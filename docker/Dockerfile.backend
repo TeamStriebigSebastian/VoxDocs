@@ -1,0 +1,65 @@
+# VoxDocs Backend Dockerfile
+# GDPR-compliant Dental Speech-to-Text System
+
+# Use Bullseye for FFmpeg 4.x which is compatible with av 10.x
+FROM python:3.11-slim-bullseye
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies for audio processing and PyAV build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    curl \
+    build-essential \
+    pkg-config \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash voxdocs
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY backend/requirements.txt .
+
+# Install Python dependencies
+# av 10.x requires Cython<3.0 - must use --no-build-isolation to prevent
+# pip from installing Cython 3.x in an isolated build environment
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir "Cython<3.0" setuptools wheel && \
+    pip install --no-cache-dir --no-build-isolation "av>=10.0.0,<11.0.0" && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Pre-download faster-whisper model to avoid runtime download
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"
+
+# Copy application code
+COPY backend/app ./app
+
+# Create necessary directories
+RUN mkdir -p /app/data/audio /app/data/encrypted /app/data/exports /app/models /app/logs && \
+    chown -R voxdocs:voxdocs /app
+
+# Switch to non-root user
+USER voxdocs
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

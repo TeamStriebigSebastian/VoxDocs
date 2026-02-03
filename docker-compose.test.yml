@@ -1,0 +1,81 @@
+# VoxDocs Test Setup - Einfaches lokales Testen
+#
+# Starten mit: docker-compose -f docker-compose.test.yml up --build
+#
+# Zugriff im Browser:
+#   - Lokal: https://localhost:3443 (Zertifikatswarnung akzeptieren)
+#   - WLAN/Handy: https://<DEINE-IP>:3443 (z.B. https://192.168.1.100:3443)
+#
+# WICHTIG: Für Mikrofon-Zugriff auf mobilen Geräten muss HTTPS verwendet werden!
+#          Das selbstsignierte Zertifikat muss im Browser akzeptiert werden.
+#
+# LLM: Ollama wird für die Korrektur zahnmedizinischer Begriffe verwendet.
+#      Beim ersten Start wird das Modell heruntergeladen (~2GB).
+
+version: '3.8'
+
+services:
+  # Ollama for local LLM processing (GDPR-compliant)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: voxdocs-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    # Pull qwen2.5:3b on startup - good German support
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull qwen2.5:3b && wait"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s  # Model download can take a while
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: voxdocs-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - SECRET_KEY=test-secret-key-for-local-dev
+      - MASTER_KEY=test-master-key-32-bytes-long!!
+      - WHISPER_MODEL=small
+      - WHISPER_DEVICE=cpu
+      - BATCH_PROCESSING_HOUR=2
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=qwen2.5:3b
+      - OLLAMA_HOST=http://ollama:11434
+      - USE_LLM_CORRECTION=true
+    volumes:
+      - voxdocs-data:/app/data
+      - voxdocs-logs:/app/logs
+      - voxdocs-models:/app/models
+    depends_on:
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: voxdocs-frontend
+    ports:
+      - "3000:80"    # HTTP (redirects to HTTPS)
+      - "3443:443"   # HTTPS (required for microphone on mobile)
+    depends_on:
+      - backend
+
+volumes:
+  voxdocs-data:
+  voxdocs-logs:
+  voxdocs-models:
+  ollama-models:

@@ -1,0 +1,42 @@
+# VoxDocs Frontend Dockerfile
+# PWA for Dental Speech-to-Text Documentation
+
+# Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY frontend/ .
+
+# Build the application
+RUN npm run build
+
+# Production stage - serve with nginx
+FROM nginx:alpine
+
+# Copy custom nginx config
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy SSL certificates
+COPY docker/ssl/server.crt /etc/nginx/ssl/server.crt
+COPY docker/ssl/server.key /etc/nginx/ssl/server.key
+
+# Copy built assets
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Expose ports (HTTP and HTTPS)
+EXPOSE 80 443
+
+# Health check - use dedicated HTTP health endpoint (no SSL needed internally)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+
+# Run nginx
+CMD ["nginx", "-g", "daemon off;"]

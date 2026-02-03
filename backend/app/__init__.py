@@ -1,0 +1,1 @@
+"""VoxDocs Backend Application."""
