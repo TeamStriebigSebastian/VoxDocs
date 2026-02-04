@@ -3,8 +3,10 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ShieldCheck, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export const LoginPage: React.FC = () => {
+    const { t } = useTranslation();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -25,7 +27,7 @@ export const LoginPage: React.FC = () => {
             await login(username, password);
             navigate(from, { replace: true });
         } catch (err: any) {
-            setError(err.message || 'Failed to login');
+            setError(err.message || t('login.error'));
         } finally {
             setIsSubmitting(false);
         }
@@ -38,8 +40,8 @@ export const LoginPage: React.FC = () => {
                     <div className="h-12 w-12 bg-blue-600 rounded-lg flex items-center justify-center mb-4">
                         <ShieldCheck className="h-7 w-7 text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800">VoxDocs Login</h1>
-                    <p className="text-slate-500 mt-2">Secure Case Documentation</p>
+                    <h1 className="text-2xl font-bold text-slate-800">{t('login.title')}</h1>
+                    <p className="text-slate-500 mt-2">{t('login.subtitle')}</p>
                 </div>
 
                 {error && (
@@ -51,28 +53,28 @@ export const LoginPage: React.FC = () => {
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Username
+                            {t('login.username')}
                         </label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="Enter your username"
+                            placeholder={t('login.placeholderUsername')}
                             required
                         />
                     </div>
 
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Password
+                            {t('login.password')}
                         </label>
                         <input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="••••••••"
+                            placeholder={t('login.placeholderPassword')}
                             required
                         />
                     </div>
@@ -85,16 +87,16 @@ export const LoginPage: React.FC = () => {
                         {isSubmitting ? (
                             <>
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Signing in...
+                                {t('login.signingIn')}
                             </>
                         ) : (
-                            'Sign In'
+                            t('login.signIn')
                         )}
                     </button>
 
                     <div className="text-center mt-4">
                         <p className="text-xs text-slate-400">
-                            Check database seeding for credentials (defaults: admin / admin123)
+                            {t('login.credentialsHint')}
                         </p>
                     </div>
                 </form>

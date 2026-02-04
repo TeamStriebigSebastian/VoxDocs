@@ -22,8 +22,10 @@ export interface LocalEntry {
     has_image?: boolean
     category_id: number | null
     author_id: number
+    author_name?: string
     synced: boolean
     parent_entry_id?: number | null
+    parent_entry_uuid?: string | null  // UUID for sync purposes
     pendingAudioBlob?: Blob
     pendingImageBlob?: Blob
     translations?: { language_code: string, translated_text: string }[]
@@ -83,5 +85,5 @@ export const db = new VoxDocsDB()
  * Generate a UUID for local entries before sync
  */
 export function generateLocalUUID(): string {
-    return 'local-' + crypto.randomUUID()
+    return crypto.randomUUID()
 }

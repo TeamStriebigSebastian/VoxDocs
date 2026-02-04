@@ -41,7 +41,11 @@ async def list_entries(
 
         # Fetch entries
         # Order by created_at DESC (Newest first)
-        query = select(Entry).options(selectinload(Entry.translations)).where(Entry.case_id == case.id).order_by(Entry.created_at.desc())
+        query = select(Entry).options(
+            selectinload(Entry.translations),
+            selectinload(Entry.author),
+            selectinload(Entry.parent)
+        ).where(Entry.case_id == case.id).order_by(Entry.created_at.desc())
         
         # Apply pagination
         if limit is not None:
@@ -56,13 +60,16 @@ async def list_entries(
                 "uuid": e.uuid,
                 "text": e.text,
                 "created_at": e.created_at,
-                "author_id": e.author_id, # In real app resolve to name
+                "author_id": e.author_id,
+                "author_name": e.author.username if e.author else f"User {e.author_id}",
                 "has_audio": bool(e.audio_object_key),
                 "audio_status": e.audio_status.value if e.audio_status else None,
                 "has_image": bool(e.image_object_key),
                 "structured_data": e.structured_data,
                 "category_id": e.category_id,
                 "version": e.version,
+                "parent_entry_id": e.parent_entry_id,
+                "parent_entry_uuid": e.parent.uuid if e.parent else None,
                 "translations": [
                     {"language_code": t.language_code, "translated_text": t.translated_text}
                     for t in e.translations
@@ -83,6 +90,8 @@ async def create_entry(
     category_id: Optional[int] = Form(None),
     structured_data: str = Form("{}"), # JSON string
     parent_entry_id: Optional[int] = Form(None),
+    parent_entry_uuid: Optional[str] = Form(None),  # UUID-based linking (preferred)
+    entry_uuid: Optional[str] = Form(None), # Allow client to specify UUID (for offline sync)
     audio_file: Optional[UploadFile] = File(None),
     image_file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_active_user),
@@ -121,6 +130,18 @@ async def create_entry(
                 raise HTTPException(status_code=400, detail="Category not found")
             if category.group_id != case.group_id:
                  raise HTTPException(status_code=400, detail="Category belongs to a different group")
+
+        # Resolve parent_entry_uuid to parent_entry_id if provided
+        resolved_parent_id = parent_entry_id
+        if parent_entry_uuid:
+            parent_result = await db.execute(
+                select(Entry).where(Entry.uuid == parent_entry_uuid)
+            )
+            parent_entry = parent_result.scalar_one_or_none()
+            if parent_entry:
+                resolved_parent_id = parent_entry.id
+            else:
+                logger.warning(f"Parent entry UUID not found: {parent_entry_uuid}")
 
         # Handle Audio Upload
         audio_key = None
@@ -161,7 +182,7 @@ async def create_entry(
             image_key = filename
 
         new_entry = Entry(
-            uuid=str(uuid.uuid4()),
+            uuid=entry_uuid or str(uuid.uuid4()),
             case_id=case.id,
             category_id=category_id,
             author_id=current_user.id,
@@ -171,7 +192,7 @@ async def create_entry(
             audio_status=audio_status,
             image_object_key=image_key,
             version=1,
-            parent_entry_id=parent_entry_id,
+            parent_entry_id=resolved_parent_id,
             created_at=datetime.utcnow()
         )
         

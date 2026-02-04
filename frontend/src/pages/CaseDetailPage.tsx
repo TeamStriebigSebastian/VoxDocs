@@ -10,6 +10,8 @@ import { syncService } from '../services/syncService'
 import { useAuth } from '../contexts/AuthContext'
 import { authService, User } from '../services/authService'
 import { ImageAnnotationModal } from '../components/ImageAnnotationModal'
+import { useTranslation } from 'react-i18next'
+import { fetchWithAuth } from '../services/fetchClient'
 
 interface Category {
     id: number
@@ -32,9 +34,7 @@ const SecureImage = ({ entryUuid, className, pendingBlob }: { entryUuid: string,
 
         let active = true
         if (accessToken) {
-            fetch(`/api/entries/${entryUuid}/image`, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            })
+            fetchWithAuth(`/api/entries/${entryUuid}/image`)
                 .then(res => {
                     if (res.ok) return res.blob()
                     throw new Error('Failed to load image')
@@ -59,6 +59,7 @@ const SecureImage = ({ entryUuid, className, pendingBlob }: { entryUuid: string,
 export default function CaseDetailPage() {
     const { uuid } = useParams()
     const navigate = useNavigate()
+    const { t } = useTranslation()
 
     // Pagination State
     const [visibleCount, setVisibleCount] = useState(20)
@@ -121,7 +122,7 @@ export default function CaseDetailPage() {
 
     const handleUpdateStatus = async (newStatus: string) => {
         if (!caseFile || !accessToken) return
-        if (!confirm(`Status wirklich auf "${newStatus}" ändern?`)) return
+        if (!confirm(t('caseDetail.confirmStatusChange', { status: newStatus }))) return
 
         try {
             const res = await fetch(`/api/cases/${caseFile.uuid}`, {
@@ -140,7 +141,7 @@ export default function CaseDetailPage() {
                     await db.cases.update(caseFile.id, { status: data.status, synced: true })
                 }
             } else {
-                alert("Fehler beim Aktualisieren des Status (Berechtigung fehlt?)")
+                alert(t('caseDetail.statusError'))
             }
         } catch (e) {
             console.error(e)
@@ -153,7 +154,7 @@ export default function CaseDetailPage() {
     // Annotation / Attachment State
     const [annotationFile, setAnnotationFile] = useState<File | null>(null)
     const [isAnnotationOpen, setIsAnnotationOpen] = useState(false)
-    const [attachmentParentId, setAttachmentParentId] = useState<number | null>(null)
+    const [attachmentParentUuid, setAttachmentParentUuid] = useState<string | null>(null)
 
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [showTextInput, setShowTextInput] = useState(false)
@@ -194,10 +195,8 @@ export default function CaseDetailPage() {
         if (!navigator.onLine || !accessToken) return
 
         try {
-            const headers = { 'Authorization': `Bearer ${accessToken}` }
-
             // Fetch case
-            const caseRes = await fetch(`/api/cases/${id}`, { headers })
+            const caseRes = await fetchWithAuth(`/api/cases/${id}`)
             if (caseRes.ok) {
                 const caseData = await caseRes.json()
                 const existing = await db.cases.where('uuid').equals(id).first()
@@ -206,10 +205,16 @@ export default function CaseDetailPage() {
                 } else {
                     await db.cases.add({ ...caseData, synced: true, lastModified: Date.now() })
                 }
-            } else if (caseRes.status === 401) return logout()
+            } else if (caseRes.status === 401) {
+                // If fetchWithAuth failed to refresh, it invalidates.
+                // We should check if we are still authenticated or let the next render handle it.
+                // But generally fetchWithAuth handles the retry.
+                // If it returns 401 here, it means refresh failed.
+                return logout()
+            }
 
             // Fetch entries (Paginated)
-            const entriesRes = await fetch(`/api/entries/?case_uuid=${id}&limit=${limit}&skip=${skip}`, { headers })
+            const entriesRes = await fetchWithAuth(`/api/entries/?case_uuid=${id}&limit=${limit}&skip=${skip}`)
             if (entriesRes.ok) {
                 const text = await entriesRes.text()
                 try {
@@ -221,14 +226,20 @@ export default function CaseDetailPage() {
                             // Strip server ID to avoid collision with local auto-inc ID
                             // We rely on UUID for uniqueness
                             const { id: serverId, ...entryData } = entry
-
                             const entryWithCaseUuid = { ...entryData, case_uuid: id, synced: true }
-                            const existingEntry = await db.entries.where('uuid').equals(entry.uuid).first()
+
+                            // Try to find existing entry by UUID or local-UUID
+                            let existingEntry = await db.entries.where('uuid').equals(entry.uuid).first()
+                            if (!existingEntry) {
+                                existingEntry = await db.entries.where('uuid').equals(`local-${entry.uuid}`).first()
+                            }
 
                             if (!existingEntry) {
                                 await db.entries.add(entryWithCaseUuid)
-                            } else if (existingEntry.synced) {
-                                // Update synced entries with server data, preserving local ID
+                            } else {
+                                // Update existing entry (synced or not) with server data
+                                // This ensures 'local-' UUIDs get updated to server UUIDs and marked synced
+                                // And pending transcriptions get updated
                                 await db.entries.update(existingEntry.id!, entryWithCaseUuid)
                             }
                         }
@@ -241,7 +252,7 @@ export default function CaseDetailPage() {
             }
 
             // Fetch tasks
-            const tasksRes = await fetch(`/api/tasks/?case_uuid=${id}`, { headers })
+            const tasksRes = await fetchWithAuth(`/api/tasks/?case_uuid=${id}`)
             if (tasksRes.ok) {
                 const text = await tasksRes.text()
                 try {
@@ -403,8 +414,8 @@ export default function CaseDetailPage() {
     }
 
     // Attachment Handlers
-    const handleAttachmentClick = (parentId: number) => {
-        setAttachmentParentId(parentId)
+    const handleAttachmentClick = (parentUuid: string) => {
+        setAttachmentParentUuid(parentUuid)
         attachmentInputRef.current?.click()
     }
 
@@ -417,7 +428,7 @@ export default function CaseDetailPage() {
     }
 
     const handleSaveAnnotation = async (blob: Blob) => {
-        if (!attachmentParentId || !caseFile) return
+        if (!attachmentParentUuid || !caseFile) return
 
         try {
             setIsSubmitting(true)
@@ -434,7 +445,7 @@ export default function CaseDetailPage() {
                 author_id: 0,
                 synced: false,
                 pendingImageBlob: blob,
-                parent_entry_id: attachmentParentId,
+                parent_entry_uuid: attachmentParentUuid,
                 structured_data: { is_attachment: true }
             }
 
@@ -454,7 +465,7 @@ export default function CaseDetailPage() {
             console.error(e)
         } finally {
             setIsSubmitting(false)
-            setAttachmentParentId(null)
+            setAttachmentParentUuid(null)
         }
     }
 
@@ -531,8 +542,8 @@ export default function CaseDetailPage() {
         }
     }
 
-    if (loading) return <div className="p-8 text-center">Lade Fall...</div>
-    if (!caseFile) return <div className="p-8 text-center text-red-500">Fall nicht gefunden</div>
+    if (loading) return <div className="p-8 text-center">{t('caseDetail.loadingCase')}</div>
+    if (!caseFile) return <div className="p-8 text-center text-red-500">{t('caseDetail.caseNotFound')}</div>
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -540,7 +551,7 @@ export default function CaseDetailPage() {
             {/* LEFT: Task Sidebar (Desktop) / Top (Mobile) */}
             <aside className="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col order-2 md:order-1 hidden md:flex">
                 <div className="p-4 border-b border-slate-100 font-semibold text-slate-700 flex justify-between items-center">
-                    <span>Plan / Aufgaben</span>
+                    <span>{t('caseDetail.planTasks')}</span>
                     <button
                         onClick={() => setShowTaskInput(!showTaskInput)}
                         className="p-1 hover:bg-slate-100 rounded text-blue-600"
@@ -555,20 +566,20 @@ export default function CaseDetailPage() {
                             type="text"
                             value={newTaskTitle}
                             onChange={e => setNewTaskTitle(e.target.value)}
-                            placeholder="Neue Aufgabe..."
+                            placeholder={t('caseDetail.newTaskPlaceholder')}
                             className="w-full p-2 text-sm border border-slate-300 rounded mb-2"
                             autoFocus
                         />
                         <div className="flex justify-end space-x-2">
-                            <button type="button" onClick={() => setShowTaskInput(false)} className="text-xs text-slate-500">Abbrechen</button>
-                            <button type="submit" className="text-xs bg-blue-600 text-white px-2 py-1 rounded">Speichern</button>
+                            <button type="button" onClick={() => setShowTaskInput(false)} className="text-xs text-slate-500">{t('common.cancel')}</button>
+                            <button type="submit" className="text-xs bg-blue-600 text-white px-2 py-1 rounded">{t('common.save')}</button>
                         </div>
                     </form>
                 )}
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                     {tasks.length === 0 && !showTaskInput && (
-                        <div className="text-center py-8 text-slate-400 text-sm">Keine Aufgaben</div>
+                        <div className="text-center py-8 text-slate-400 text-sm">{t('caseDetail.noTasks')}</div>
                     )}
                     {tasks.map((task: LocalTask) => (
                         <div
@@ -624,10 +635,10 @@ export default function CaseDetailPage() {
                                 <span className={`px-2 rounded uppercase text-xs font-bold tracking-wider ${caseFile.status === 'active' ? 'bg-green-100 text-green-700' :
                                     caseFile.status === 'archived' ? 'bg-orange-100 text-orange-700' : 'bg-slate-200 text-slate-600'
                                     }`}>
-                                    {caseFile.status}
+                                    {t(`common.${caseFile.status}`, { defaultValue: caseFile.status })}
                                 </span>
                                 <span>•</span>
-                                <span>{entries.length} Einträge</span>
+                                <span>{entries.length} {t('caseDetail.entries')}</span>
                             </div>
                         </div>
                     </div>
@@ -640,7 +651,7 @@ export default function CaseDetailPage() {
                                     onClick={() => handleUpdateStatus('archived')}
                                     className="px-3 py-1 text-xs font-medium bg-orange-50 text-orange-700 rounded hover:bg-orange-100 border border-orange-200"
                                 >
-                                    Archivieren
+                                    {t('caseDetail.archive')}
                                 </button>
                             )}
                             {caseFile.status !== 'active' && (
@@ -648,7 +659,7 @@ export default function CaseDetailPage() {
                                     onClick={() => handleUpdateStatus('active')}
                                     className="px-3 py-1 text-xs font-medium bg-green-50 text-green-700 rounded hover:bg-green-100 border border-green-200"
                                 >
-                                    Reaktivieren
+                                    {t('caseDetail.reactivate')}
                                 </button>
                             )}
                             {caseFile.status !== 'locked' && (
@@ -656,7 +667,7 @@ export default function CaseDetailPage() {
                                     onClick={() => handleUpdateStatus('locked')}
                                     className="px-3 py-1 text-xs font-medium bg-slate-100 text-slate-700 rounded hover:bg-slate-200 border border-slate-300"
                                 >
-                                    Sperren
+                                    {t('caseDetail.lock')}
                                 </button>
                             )}
                         </div>
@@ -669,16 +680,17 @@ export default function CaseDetailPage() {
                         {entries.length === 0 ? (
                             <div className="text-center py-12 text-slate-400">
                                 <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>Noch keine Einträge vorhanden.</p>
+                                <p>{t('caseDetail.noEntries')}</p>
                             </div>
                         ) : (
                             (() => {
-                                // Grouping Logic: Tree Structure
-                                const rootEntries = entries.filter(e => !e.parent_entry_id)
+                                // Grouping Logic: Tree Structure (using UUID for sync compatibility)
+                                const rootEntries = entries.filter(e => !e.parent_entry_uuid)
 
                                 return rootEntries.map((entry: Entry) => {
                                     const category = categories.find((c: Category) => c.id === entry.category_id)
-                                    const children = entries.filter(e => e.parent_entry_id === entry.id)
+                                    // Match children using parent_entry_uuid for proper sync
+                                    const children = entries.filter(e => e.parent_entry_uuid === entry.uuid)
 
                                     // Separate attachments from replies (logic: attachments have is_attachment=true OR depends on implementation)
                                     // For now, let's treat media-only children and explicitly flagged ones as attachments
@@ -697,7 +709,7 @@ export default function CaseDetailPage() {
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="font-medium text-slate-700 leading-none">
-                                                            User {entry.author_id}
+                                                            {entry.author_name || `${t('caseDetail.user')} ${entry.author_id}`}
                                                         </span>
                                                         <span className="text-xs text-slate-400 mt-0.5">{new Date(entry.created_at).toLocaleString('de-DE')}</span>
                                                     </div>
@@ -714,10 +726,10 @@ export default function CaseDetailPage() {
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                if (entry.id) handleAttachmentClick(entry.id);
+                                                                handleAttachmentClick(entry.uuid);
                                                             }}
                                                             className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600"
-                                                            title="Foto anhängen"
+                                                            title={t('caseDetail.attachPhoto')}
                                                         >
                                                             <Camera className="w-4 h-4" />
                                                         </button>
@@ -732,7 +744,7 @@ export default function CaseDetailPage() {
                                                         }}
                                                         className="text-xs text-slate-400 hover:text-blue-600 px-2 py-1 rounded bg-slate-50 border border-slate-100"
                                                     >
-                                                        Antworten
+                                                        {t('caseDetail.reply')}
                                                     </button>
                                                 </div>
                                             </div>
@@ -806,9 +818,9 @@ export default function CaseDetailPage() {
                                                             <Mic className={`w-4 h-4 ${entry.text ? 'text-green-600' : 'text-blue-600'}`} />
                                                         </div>
                                                         <div>
-                                                            <div className="text-sm font-medium text-slate-700">Audio-Notiz</div>
+                                                            <div className="text-sm font-medium text-slate-700">{t('caseDetail.audioNote')}</div>
                                                             <div className="text-xs text-slate-500">
-                                                                {entry.text ? 'Transkription abgeschlossen' : 'Transkription ausstehend...'}
+                                                                {entry.text ? t('caseDetail.transcriptionDone') : t('caseDetail.transcriptionPending')}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -820,8 +832,8 @@ export default function CaseDetailPage() {
                                                             <ImageIcon className="w-4 h-4 text-green-600" />
                                                         </div>
                                                         <div>
-                                                            <div className="text-sm font-medium text-slate-700">Foto aufgenommen</div>
-                                                            <div className="text-xs text-slate-500">Bild gespeichert</div>
+                                                            <div className="text-sm font-medium text-slate-700">{t('caseDetail.photoTaken')}</div>
+                                                            <div className="text-xs text-slate-500">{t('caseDetail.imageSaved')}</div>
                                                         </div>
                                                         <div className="flex-1" />
                                                         {/* Main Entry Image Display using SecureImage */}
@@ -865,21 +877,27 @@ export default function CaseDetailPage() {
                                                         {replies.map(reply => (
                                                             <div key={reply.id} className="bg-slate-50 p-3 rounded-lg text-sm text-slate-700 border border-slate-200">
                                                                 <div className="flex items-center space-x-2 mb-1">
-                                                                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600">
-                                                                        {reply.author_id}
+                                                                    <div className="flex items-center space-x-1.5 flex-1 min-w-0">
+                                                                        <div className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500">
+                                                                            {(reply.author_name ? reply.author_name.charAt(0).toUpperCase() : "U")}
+                                                                        </div>
+                                                                        <span className="font-semibold text-xs text-slate-600 truncate">
+                                                                            {reply.author_name || `${t('caseDetail.user')} ${reply.author_id}`}
+                                                                        </span>
                                                                     </div>
-                                                                    <span className="font-semibold text-xs text-slate-600">User {reply.author_id}</span>
                                                                     <span className="text-[10px] text-slate-400">{new Date(reply.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>
                                                                 </div>
                                                                 <div className="text-slate-800">{reply.text}</div>
 
                                                                 {/* Audio reply indicator */}
-                                                                {reply.has_audio && (
-                                                                    <div className="mt-2 flex items-center space-x-2 text-blue-600 text-xs bg-blue-50 p-1.5 rounded w-fit">
-                                                                        <Mic className="w-3 h-3" />
-                                                                        <span>Audio-Notiz</span>
-                                                                    </div>
-                                                                )}
+                                                                {
+                                                                    reply.has_audio && (
+                                                                        <div className="mt-2 flex items-center space-x-2 text-blue-600 text-xs bg-blue-50 p-1.5 rounded w-fit">
+                                                                            <Mic className="w-3 h-3" />
+                                                                            <span>{t('caseDetail.audioNote')}</span>
+                                                                        </div>
+                                                                    )
+                                                                }
                                                             </div>
                                                         ))}
                                                     </div>
@@ -955,7 +973,7 @@ export default function CaseDetailPage() {
                                                 <ImageIcon className="w-5 h-5" />
                                             </div>
                                             <div>
-                                                <div className="text-sm font-bold">Foto aufgenommen</div>
+                                                <div className="text-sm font-bold">{t('caseDetail.photoTaken')}</div>
                                                 <div className="text-xs opacity-80">{imageFile.name}</div>
                                             </div>
                                         </div>
@@ -976,7 +994,7 @@ export default function CaseDetailPage() {
                                 {/* Reply Indicator */}
                                 {parentEntryId && (
                                     <div className="flex items-center justify-between bg-blue-50 p-2 rounded-lg border border-blue-100 text-xs text-blue-700 mb-1">
-                                        <span className="font-medium">Antwort / Korrektur zu Eintrag #{parentEntryId}</span>
+                                        <span className="font-medium">{t('caseDetail.replyToEntry', { id: parentEntryId })}</span>
                                         <button
                                             type="button"
                                             onClick={() => setParentEntryId(null)}
@@ -995,7 +1013,7 @@ export default function CaseDetailPage() {
                                         value={newEntryText}
                                         onChange={(e) => setNewEntryText(e.target.value)}
                                         className="flex-1 p-4 border border-slate-300 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none shadow-sm text-base"
-                                        placeholder={imageFile ? "Notiz zum Foto..." : "Eintrag schreiben..."}
+                                        placeholder={imageFile ? t('caseDetail.noteForPhoto') : t('caseDetail.writeEntry')}
                                         rows={2}
                                         autoFocus
                                     />
@@ -1022,7 +1040,7 @@ export default function CaseDetailPage() {
                                         }}
                                         className="text-center text-xs text-slate-400 py-2 hover:text-slate-600"
                                     >
-                                        Abbrechen
+                                        {t('common.cancel')}
                                     </button>
                                 </div>
                             </form>
@@ -1038,7 +1056,7 @@ export default function CaseDetailPage() {
                                     >
                                         <LayoutGrid className="w-7 h-7 text-slate-600" />
                                     </button>
-                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Fälle</span>
+                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{t('layout.nav.cases')}</span>
                                 </div>
 
                                 {/* Center: Smart Mic Button */}
@@ -1058,7 +1076,7 @@ export default function CaseDetailPage() {
                                     >
                                         <Camera className="w-7 h-7" />
                                     </button>
-                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Foto</span>
+                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{t('caseDetail.photo')}</span>
                                 </div>
                             </div>
                         )}

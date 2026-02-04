@@ -89,6 +89,8 @@ Return a valid JSON object with:
         if not text:
             return ""
             
+        highlight_instr = ""
+        prior_instructions = ""
         if highlight_phrase:
             highlight_instr = f"""
 IMPORTANT: The phrase "{highlight_phrase}" is highlighted in the source text.
@@ -99,9 +101,9 @@ Example: if source is "Review the <mark>blue door</mark>" and target is German, 
 """
 
         prompt = f"""
-You are a professional medical translator. 
+You are a professional translator. 
 Translate the following text into {target_language}.
-Maintain the professional tone and medical terminology if present.
+Maintain the professional tone.
 Do not add any explanations, just return the translated text.
 {highlight_instr}
 
@@ -131,7 +133,7 @@ Text:
         cats_json = [{"id": c.id, "name": c.name, "keywords": c.keywords} for c in categories]
         
         prompt = f"""
-You are an intelligent categorization assistant for a dental practice.
+You are an intelligent categorization assistant.
 Analyze the following transcription and determine which category it belongs to.
 
 Categories:

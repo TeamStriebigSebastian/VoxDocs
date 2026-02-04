@@ -3,6 +3,7 @@ import { useAppStore } from '../stores/appStore'
 import { onboardingApi } from '../services/api'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { syncService } from '../services/syncService'
+import { useTranslation } from 'react-i18next'
 
 interface Category {
   category: string
@@ -16,6 +17,7 @@ interface Category {
 }
 
 export default function OnboardingPage() {
+  const { t } = useTranslation()
   const { practiceId, userId } = useAppStore()
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
@@ -120,18 +122,8 @@ export default function OnboardingPage() {
   }
 
   const getCategoryName = (category: string): string => {
-    const names: Record<string, string> = {
-      tooth_designation: 'Zahnbezeichnungen',
-      surface: 'Flächenbeschreibungen',
-      diagnosis: 'Diagnosen',
-      finding: 'Befunde',
-      treatment: 'Behandlungsschritte',
-      material: 'Materialien',
-      instrument: 'Instrumente',
-      anatomy: 'Anatomische Begriffe',
-      sentence: 'Satzkombinationen',
-    }
-    return names[category] || category
+    const key = `onboarding.categories.${category}`
+    return t(key, { defaultValue: category })
   }
 
   const progressPercentage = progress.total > 0 ? (progress.completed / progress.total) * 100 : 0
@@ -140,43 +132,42 @@ export default function OnboardingPage() {
     return (
       <div className="py-8">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">Sprachtraining</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">{t('onboarding.title')}</h2>
           <p className="text-slate-600 mb-6 max-w-md mx-auto">
-            Trainieren Sie das System mit Ihrer Stimme. Sprechen Sie ca. 200-250 zahnmedizinische
-            Begriffe und Phrasen für optimale Erkennungsleistung.
+            {t('onboarding.description')}
           </p>
           <div className="text-sm text-slate-500 mb-4">
-            <p>Geschätzte Dauer: 10-15 Minuten</p>
+            <p>{t('onboarding.duration')}</p>
           </div>
         </div>
 
         {/* Speaker info form */}
         <div className="card mb-6">
-          <h3 className="font-medium text-slate-800 mb-4">Sprecher-Informationen</h3>
+          <h3 className="font-medium text-slate-800 mb-4">{t('onboarding.speakerInfo')}</h3>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">
-                Name / Kennung *
+                {t('onboarding.nameLabel')}
               </label>
               <input
                 type="text"
                 value={speakerName}
                 onChange={(e) => setSpeakerName(e.target.value)}
-                placeholder="z.B. Dr. Müller, Assistenz Anna"
+                placeholder={t('onboarding.namePlaceholder')}
                 className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-dental-500 focus:border-dental-500"
               />
               <p className="text-xs text-slate-500 mt-1">
-                Wird für die Trainingsdaten verwendet
+                {t('onboarding.nameHint')}
               </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-1">
-                Notizen (optional)
+                {t('onboarding.notesLabel')}
               </label>
               <textarea
                 value={speakerNotes}
                 onChange={(e) => setSpeakerNotes(e.target.value)}
-                placeholder="z.B. Dialekt, Mikrofon-Setup, etc."
+                placeholder={t('onboarding.notesPlaceholder')}
                 rows={2}
                 className="w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-dental-500 focus:border-dental-500"
               />
@@ -189,12 +180,12 @@ export default function OnboardingPage() {
           disabled={isLoading || !speakerName.trim()}
           className="btn btn-primary text-lg px-8 py-3 w-full"
         >
-          {isLoading ? 'Wird gestartet...' : 'Training starten'}
+          {isLoading ? t('onboarding.starting') : t('onboarding.start')}
         </button>
 
         {!speakerName.trim() && (
           <p className="text-sm text-slate-500 text-center mt-2">
-            Bitte geben Sie einen Namen ein
+            {t('onboarding.enterName')}
           </p>
         )}
       </div>
@@ -209,17 +200,16 @@ export default function OnboardingPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-4">Training abgeschlossen!</h2>
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">{t('onboarding.completeTitle')}</h2>
         <p className="text-slate-600 mb-6">
-          Vielen Dank{speakerName ? `, ${speakerName}` : ''}! Sie haben alle {progress.total} Phrasen aufgenommen.
+          {t('onboarding.completeMessage', { name: speakerName ? `, ${speakerName}` : '', total: progress.total })}
         </p>
 
         {/* Export section */}
         <div className="card text-left mb-6">
-          <h3 className="font-medium text-slate-800 mb-3">Trainingsdaten exportieren</h3>
+          <h3 className="font-medium text-slate-800 mb-3">{t('onboarding.exportTitle')}</h3>
           <p className="text-sm text-slate-600 mb-4">
-            Laden Sie die Aufnahmen als ZIP-Datei herunter, um Whisper damit zu trainieren.
-            Enthält alle Audio-Dateien und eine manifest.csv mit Metadaten.
+            {t('onboarding.exportDescription')}
           </p>
           <button
             onClick={downloadExport}
@@ -228,7 +218,7 @@ export default function OnboardingPage() {
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            <span>Trainingsdaten herunterladen</span>
+            <span>{t('onboarding.downloadButton')}</span>
           </button>
         </div>
 
@@ -242,7 +232,7 @@ export default function OnboardingPage() {
           }}
           className="btn btn-secondary"
         >
-          Neues Training starten
+          {t('onboarding.restartButton')}
         </button>
       </div>
     )
@@ -253,7 +243,7 @@ export default function OnboardingPage() {
       {/* Progress bar */}
       <div className="card">
         <div className="flex justify-between text-sm text-slate-600 mb-2">
-          <span>Fortschritt</span>
+          <span>{t('onboarding.progress')}</span>
           <span>{progress.completed} / {progress.total}</span>
         </div>
         <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
@@ -263,7 +253,7 @@ export default function OnboardingPage() {
           />
         </div>
         <p className="text-sm text-slate-500 mt-2">
-          {progressPercentage.toFixed(0)}% abgeschlossen
+          {t('onboarding.completed', { percent: progressPercentage.toFixed(0) })}
         </p>
       </div>
 
@@ -292,7 +282,7 @@ export default function OnboardingPage() {
       {/* Current phrase */}
       {currentPhrase && (
         <div className="card text-center py-8">
-          <p className="text-sm text-slate-500 mb-2">Sprechen Sie:</p>
+          <p className="text-sm text-slate-500 mb-2">{t('onboarding.speakPrompt')}</p>
           <p className="text-2xl font-semibold text-slate-800 mb-6">
             "{currentPhrase.phrase_text}"
           </p>
@@ -301,11 +291,10 @@ export default function OnboardingPage() {
           <div className="flex flex-col items-center">
             <button
               onClick={isRecording ? stopRecording : startRecording}
-              className={`w-24 h-24 rounded-full transition-all duration-300 ${
-                isRecording
+              className={`w-24 h-24 rounded-full transition-all duration-300 ${isRecording
                   ? 'bg-red-500 hover:bg-red-600 recording-pulse'
                   : 'bg-dental-600 hover:bg-dental-700'
-              }`}
+                }`}
             >
               {isRecording ? (
                 <div className="w-8 h-8 bg-white rounded mx-auto" />
@@ -318,8 +307,8 @@ export default function OnboardingPage() {
 
             <p className="text-sm text-slate-500 mt-4">
               {isRecording
-                ? `Aufnahme: ${duration.toFixed(1)}s`
-                : 'Zum Aufnehmen tippen'}
+                ? t('onboarding.recording', { seconds: duration.toFixed(1) })
+                : t('onboarding.tapToRecord')}
             </p>
           </div>
         </div>
@@ -331,12 +320,12 @@ export default function OnboardingPage() {
         disabled={isRecording}
         className="btn btn-secondary w-full"
       >
-        Überspringen
+        {t('onboarding.skip')}
       </button>
 
       {/* Category selector */}
       <div className="card">
-        <h4 className="text-sm font-medium text-slate-600 mb-3">Kategorien</h4>
+        <h4 className="text-sm font-medium text-slate-600 mb-3">{t('onboarding.categoriesTitle')}</h4>
         <div className="flex flex-wrap gap-2">
           {categories.map((cat, index) => (
             <button
@@ -346,13 +335,12 @@ export default function OnboardingPage() {
                 const firstUnrecorded = cat.phrases.findIndex((p) => !p.is_recorded)
                 setCurrentPhraseIndex(firstUnrecorded !== -1 ? firstUnrecorded : 0)
               }}
-              className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                index === currentCategoryIndex
+              className={`px-3 py-1 rounded-full text-sm transition-colors ${index === currentCategoryIndex
                   ? 'bg-dental-600 text-white'
                   : cat.completed_phrases >= cat.total_phrases
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
             >
               {getCategoryName(cat.category)}
             </button>

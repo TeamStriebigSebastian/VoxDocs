@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Mic, Square, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 interface SmartVoiceButtonProps {
     onRecordingComplete: (file: File) => void
@@ -172,6 +173,8 @@ export default function SmartVoiceButton({ onRecordingComplete, isProcessing = f
         return `${mins}:${secs}`
     }
 
+    const { t } = useTranslation()
+
     return (
         <div className="flex flex-col items-center">
             {/* Timer Overlay (Floating above or below) */}
@@ -197,7 +200,7 @@ export default function SmartVoiceButton({ onRecordingComplete, isProcessing = f
                     }
                     ${isProcessing ? 'opacity-70 cursor-wait' : ''}
                 `}
-                title={isRecording ? "Loslassen zum Senden" : "Gedrückt halten oder Antippen"}
+                title={isRecording ? t('smartMic.releaseToSend') : t('smartMic.holdOrTap')}
             >
                 {isProcessing ? (
                     <Loader2 className="w-8 h-8 text-white animate-spin" />
@@ -208,7 +211,7 @@ export default function SmartVoiceButton({ onRecordingComplete, isProcessing = f
                 )}
             </button>
             <p className="mt-2 text-[10px] font-medium text-slate-400 uppercase tracking-wide">
-                {isRecording ? (mode === 'toggle' ? "Antippen zum Senden" : "Sprechen...") : "Aufnahme"}
+                {isRecording ? (mode === 'toggle' ? t('smartMic.tapToSend') : t('smartMic.speaking')) : t('smartMic.record')}
             </p>
         </div>
     )

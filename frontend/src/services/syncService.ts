@@ -5,6 +5,7 @@
 import { audioApi, onboardingApi } from './api'
 import { offlineStorage } from './offlineStorage'
 import { db, SyncQueueItem } from '../db'
+import { fetchWithAuth } from './fetchClient'
 
 type SyncStatus = 'idle' | 'syncing' | 'error'
 type SyncListener = (status: SyncStatus, pending: { recordings: number; phrases: number }) => void
@@ -93,11 +94,7 @@ class SyncService {
     }
   }
 
-  // --- Auth Helper ---
-  private getAuthHeaders(): HeadersInit {
-    const token = localStorage.getItem('access_token');
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-  }
+
 
   // --- Generic Platform Sync ---
   private async processSyncQueue() {
@@ -124,7 +121,14 @@ class SyncService {
     formData.append('case_uuid', localEntry.case_uuid);
     formData.append('text', localEntry.text || '');
     if (localEntry.category_id) formData.append('category_id', String(localEntry.category_id));
-    if (localEntry.parent_entry_id) formData.append('parent_entry_id', String(localEntry.parent_entry_id));
+    if (localEntry.parent_entry_uuid) {
+      const cleanParentUuid = localEntry.parent_entry_uuid.replace(/^local-/, '');
+      formData.append('parent_entry_uuid', cleanParentUuid);
+    }
+    if (localEntry.uuid) {
+      const cleanUuid = localEntry.uuid.replace(/^local-/, '');
+      formData.append('entry_uuid', cleanUuid);
+    }
 
     // structured_data MUST be a JSON string
     if (localEntry.structured_data) {
@@ -140,11 +144,18 @@ class SyncService {
       formData.append('image_file', localEntry.pendingImageBlob, 'image.jpg');
     }
 
-    const res = await fetch('/api/entries/', {
+    const res = await fetchWithAuth('/api/entries/', {
       method: 'POST',
-      headers: this.getAuthHeaders(), // No Content-Type for FormData
       body: formData
     });
+
+    if (res.status === 401) {
+      // If 401 persists after fetchWithAuth retry logic, it means refresh failed.
+      // We should stop syncing and potentially logout.
+      console.error('Sync failed with 401. Logout required.');
+      window.dispatchEvent(new Event('auth:logout'));
+      throw new Error('Authentication failed');
+    }
 
     if (!res.ok) throw new Error('Failed to sync entry');
 
@@ -164,11 +175,10 @@ class SyncService {
     const localTask = item.payload as any;
 
     if (item.action === 'create') {
-      const res = await fetch('/api/tasks/', {
+      const res = await fetchWithAuth('/api/tasks/', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...this.getAuthHeaders()
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           case_uuid: localTask.case_uuid,

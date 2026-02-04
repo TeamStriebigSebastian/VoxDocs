@@ -56,14 +56,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchUser = async (token: string) => {
         try {
-            const res = await fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            let currentToken = token;
+            let res = await fetch('/api/auth/me', {
+                headers: { 'Authorization': `Bearer ${currentToken}` }
             });
+
+            // Handle Token Expiry
+            if (res.status === 401) {
+                const refreshToken = localStorage.getItem('refresh_token');
+                if (refreshToken) {
+                    try {
+                        const refreshRes = await fetch('/api/auth/refresh', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ refresh_token: refreshToken })
+                        });
+
+                        if (refreshRes.ok) {
+                            const data = await refreshRes.json();
+                            currentToken = data.access_token;
+
+                            // Update tokens
+                            localStorage.setItem('access_token', currentToken);
+                            localStorage.setItem('refresh_token', data.refresh_token);
+                            setAccessToken(currentToken);
+                            useAppStore.getState().setToken(currentToken);
+
+                            // Retry original request
+                            res = await fetch('/api/auth/me', {
+                                headers: { 'Authorization': `Bearer ${currentToken}` }
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Token refresh failed:', e);
+                        // Fall through to error/logout
+                    }
+                }
+            }
 
             if (res.ok) {
                 const userData = await res.json();
                 setUser(userData);
-                setAccessToken(token); // Update state if needed
 
                 // Sync User Info to AppStore
                 const primaryRole = userData.roles.length > 0 ? userData.roles[0].role : 'viewer';

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { audioApi } from '../services/api'
+import { useTranslation } from 'react-i18next'
 
 interface Recording {
   id: number
@@ -14,6 +15,7 @@ interface Recording {
 
 export default function RecordingsListPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { practiceId } = useAppStore()
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -30,7 +32,7 @@ export default function RecordingsListPage() {
       const response = await audioApi.list(practiceId)
       setRecordings(response.recordings)
     } catch (err) {
-      setError('Aufnahmen konnten nicht geladen werden')
+      setError(t('recordings.loadError'))
       console.error(err)
     } finally {
       setIsLoading(false)
@@ -71,23 +73,20 @@ export default function RecordingsListPage() {
       failed: 'bg-red-100 text-red-800',
     }
 
-    const labels: Record<string, string> = {
-      pending: 'Ausstehend',
-      queued: 'In Warteschlange',
-      processing: 'Wird verarbeitet',
-      completed: 'Abgeschlossen',
-      failed: 'Fehlgeschlagen',
-    }
+    // Use translation keys for status
+    const labelKey = `recordings.status.${status}`
+    // Fallback to the status string itself if translation is missing (or use t with default)
+    const label = t(labelKey, { defaultValue: status })
 
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-slate-100 text-slate-800'}`}>
-        {labels[status] || status}
+        {label}
       </span>
     )
   }
 
   const handleDelete = async (uuid: string) => {
-    if (!confirm('Aufnahme wirklich löschen?')) return
+    if (!confirm(t('recordings.deleteConfirm'))) return
 
     try {
       await audioApi.delete(uuid)
@@ -110,7 +109,7 @@ export default function RecordingsListPage() {
       <div className="text-center py-12">
         <p className="text-red-600 mb-4">{error}</p>
         <button onClick={loadRecordings} className="btn btn-primary">
-          Erneut versuchen
+          {t('common.tryAgain')}
         </button>
       </div>
     )
@@ -119,9 +118,9 @@ export default function RecordingsListPage() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-slate-800">Aufnahmen</h2>
+        <h2 className="text-xl font-semibold text-slate-800">{t('recordings.title')}</h2>
         <button onClick={loadRecordings} className="btn btn-secondary text-sm">
-          Aktualisieren
+          {t('common.refresh')}
         </button>
       </div>
 
@@ -130,9 +129,9 @@ export default function RecordingsListPage() {
           <svg className="w-16 h-16 mx-auto mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
-          <p>Noch keine Aufnahmen vorhanden</p>
+          <p>{t('recordings.emptyState')}</p>
           <button onClick={() => navigate('/')} className="btn btn-primary mt-4">
-            Erste Aufnahme starten
+            {t('recordings.startFirst')}
           </button>
         </div>
       ) : (
@@ -167,7 +166,7 @@ export default function RecordingsListPage() {
                   <button
                     onClick={() => handleDelete(recording.uuid)}
                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Löschen"
+                    title={t('common.delete')}
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

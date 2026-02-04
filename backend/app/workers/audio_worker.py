@@ -41,8 +41,8 @@ async def process_audio_queue():
                 # 3. Transcribe
                 try:
                     # Resolve path
-                    # Assuming default storage structure
-                    file_path = os.path.join("/app/storage/encrypted", entry.audio_object_key)
+                    # Resolve path
+                    file_path = os.path.join(settings.ENCRYPTED_DIR, entry.audio_object_key)
                     
                     transcript = await transcribe_audio_file(file_path)
                     
