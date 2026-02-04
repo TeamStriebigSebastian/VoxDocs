@@ -11,7 +11,7 @@ Designed for teams where members speak different languages but need to collabora
 - **Multilingual Support**: Speak in ANY language, get documentation in your configured language
 - **GDPR Compliant**: Complete on-premise deployment with AES-256 encryption
 - **Multi-Room Support**: Handle multiple treatment rooms per practice
-- **Export Integration**: JSON, CSV, XML export for practice management software
+- **Export Integration**: Zip (CSV + photos) export for creating reports, like billing
 
 ## Architecture
 
