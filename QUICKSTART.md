@@ -28,7 +28,7 @@ docker-compose -f docker-compose.test.yml up --build
 ### Audio aufnehmen:
 1. Behandlungsraum auswählen
 2. Auf den großen blauen Mikrofon-Button klicken
-3. Sprechen (z.B. "Zahn eins sechs mesial Karies Grad zwei")
+3. Sprechen (z.B. "Bitte morgen das Meeting mit Herrn Schmidt vorbereiten und die Präsentation senden.")
 4. Erneut klicken zum Stoppen
 
 ### Transkription ansehen:
@@ -46,7 +46,7 @@ curl http://localhost:8000/api/health
 ```bash
 curl -X POST "http://localhost:8000/api/audio/upload" \
   -F "file=@test.wav" \
-  -F "practice_id=1" \
+  -F "group_id=1" \
   -F "process_immediately=true"
 ```
 
@@ -54,7 +54,7 @@ curl -X POST "http://localhost:8000/api/audio/upload" \
 ```bash
 curl -X POST "http://localhost:8000/api/classification/classify-text" \
   -H "Content-Type: application/json" \
-  -d '{"text": "Zahn 16 mesial Karies Grad 2"}'
+  -d '{"text": "Meeting vorbereiten, Präsentation senden"}'
 ```
 
 ## System stoppen

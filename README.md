@@ -1,14 +1,14 @@
 # VoxDocs -  Speech-to-Text Documentation System
 
-A GDPR-compliant speech recognition system for multilanguage teams that transcribes conversations during while working and classifing tasks while also checking if tasks have been verbally checked off. And of course it uses the slm power to give every user the tasks and documentation in their configured language. 
-Breaking down the language barrier for teams for work teams. No typing, no complicated workflows. Just a list of tasks in your language. 
+A local-first, privacy-focused speech documentation system for multilingual teams. It allows users to speak in their native language, automatically translates to the team's language, tracks tasks from voice reports, and securely attaches photos.
+Designed for teams where members speak different languages but need to collaborate seamlessly. No uploading of sensitive data to the cloud.
 
 ## Features
 
 - **Audio Recording PWA**: Progressive Web App with real-time waveform visualization
-- **Speech-to-Text**: OpenAI Whisper Small (multilingual) for German dental terminology
-- **Automatic Classification**: AI-based categorization of dental findings, diagnoses, treatments, and materials
-- **Onboarding System**: 200-250 dental phrase training for voice adaptation
+- **Speech-to-Text**: OpenAI Whisper Small (multilingual) for general purpose dictation
+- **Automatic Classification**: AI-based categorization of tasks, notes, and updates (identifying custom categories)
+- **Multilingual Support**: Speak in ANY language, get documentation in your configured language
 - **GDPR Compliant**: Complete on-premise deployment with AES-256 encryption
 - **Multi-Room Support**: Handle multiple treatment rooms per practice
 - **Export Integration**: JSON, CSV, XML export for practice management software
@@ -30,7 +30,7 @@ Breaking down the language barrier for teams for work teams. No typing, no compl
 │  FastAPI + SQLAlchemy + Whisper                            │
 │  - Audio upload and encryption                              │
 │  - Batch processing queue                                   │
-│  - Transcription with dental vocabulary boost               │
+│  - Transcription with vocabulary boost                      │
 │  - Rule-based classification                                │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -144,28 +144,21 @@ VoxDocs/
 - `GET /api/classification/{uuid}` - Get classifications
 - `POST /api/classification/classify-text` - Classify text
 
-### Onboarding
-- `POST /api/onboarding/start` - Start training session
-- `GET /api/onboarding/{id}/phrases` - Get phrases to record
-- `POST /api/onboarding/{id}/record` - Submit phrase recording
+
 
 ### Export
 - `POST /api/export/generate` - Generate export file
 
-## Dental Terminology Categories
+## Categories
 
-The system recognizes and classifies the following categories:
+The system automatically classifies your voice notes into categories. These can be customized, but default to:
 
-| Category | German | Examples |
-|----------|--------|----------|
-| Tooth | Zahnbezeichnung | Zahn 16, Quadrant 2 |
-| Surface | Fläche | mesial, distal, okklusal |
-| Diagnosis | Diagnose | Karies Grad 2, Parodontitis |
-| Finding | Befund | Taschentiefe 5mm, Lockerungsgrad 2 |
-| Treatment | Behandlung | Wurzelkanalbehandlung, Extraktion |
-| Material | Material | Composite, Zirkonoxid |
-| Instrument | Instrument | Rosenbohrer, Kürette |
-| Anatomy | Anatomie | Pulpa, Gingiva, Apex |
+| Category | Description | Example |
+|----------|-------------|---------|
+| Task | Action items | "Order printer paper", "Call client X" |
+| Update | Status reports | "Project A is 50% complete" |
+| Note | General observations | "Meeting room needs cleaning" |
+| Issue | Problems encountered | "Server X is down" |
 
 ## Security & Privacy
 
