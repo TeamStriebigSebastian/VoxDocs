@@ -19,8 +19,10 @@ FROM nginx:alpine
 # Copy built files
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Copy nginx config for SPA routing and API proxy
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx config template for SPA routing and API proxy.
+# The official nginx image will run envsubst on any templates placed under
+# /etc/nginx/templates at container start (via /docker-entrypoint.d scripts).
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 
