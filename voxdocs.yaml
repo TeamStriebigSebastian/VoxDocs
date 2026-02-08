@@ -1,0 +1,300 @@
+namespace: voxdocs
+
+# PostgreSQL (internal only)
+db:
+  defines: runnable
+  inherits: postgresql/db
+  # Override defaults from the package
+  containers:
+    postgres:
+      image-tag: "15-alpine"
+  services:
+    postgres:
+      container: postgres
+      port: 5432
+      protocol: tcp
+  checks:
+    # Gate dependents until Postgres is actually accepting connections
+    readiness:
+      code: tcp-check-service("voxdocs/db", "postgres")
+      period: 5
+      initialDelay: 2
+      attempts: 10
+  variables:
+    db-name:
+      type: string
+      value: voxdocs
+      env: POSTGRES_DB
+    db-user:
+      type: string
+      value: voxdocs
+      env: POSTGRES_USER
+    db-pass:
+      type: string
+      value: <- secret("db-password") default("voxdocs_secure_password_change_in_production")
+      env: POSTGRES_PASSWORD
+  permitted-secrets:
+    db-password: true
+
+# Ollama (internal only)
+ollama:
+  defines: runnable
+  inherits: ollama/ollama
+  services:
+    web:
+      container: ollama
+      port: 11434
+      protocol: tcp
+  containers:
+    ollama:
+      # Persist models
+      paths:
+        - <- `${volume-path}/ollama:/root/.ollama`
+
+backend:
+  defines: runnable
+  containers:
+    main:
+      image: voxdocs-backend:latest
+      # Persistent storage (no code mounts)
+      paths:
+        - <- `${volume-path}/voxdocs-data:/app/data`
+        - <- `${volume-path}/voxdocs-storage:/app/storage`
+        - <- `${volume-path}/voxdocs-models:/app/models`
+        - <- `${volume-path}/voxdocs-logs:/app/logs`
+  services:
+    http:
+      container: main
+      port: 8000
+      protocol: tcp
+  connections:
+    db:
+      target: voxdocs/db
+      service: postgres
+    ollama:
+      target: voxdocs/ollama
+      service: web
+  depends:
+    wait-for:
+      runnables:
+        - voxdocs/db
+        - voxdocs/ollama
+      timeout: 60
+  checks:
+    readiness:
+      code: http-get-service("voxdocs/backend", "http", "/api/health") get-member("status") 200 eq?
+      period: 10
+      initialDelay: 10
+    liveness:
+      code: http-get-service("voxdocs/backend", "http", "/api/health") get-member("status") 200 eq?
+      period: 30
+      initialDelay: 30
+  variables:
+    # Database DSN parts
+    db-host:
+      type: string
+      value: <- connection-hostname("db")
+      env: DB_HOST
+    db-port:
+      type: int
+      value: <- connection-port("db")
+      env: DB_PORT
+    db-name:
+      type: string
+      value: voxdocs
+      env: DB_NAME
+    db-user:
+      type: string
+      value: voxdocs
+      env: DB_USER
+    db-pass:
+      type: string
+      value: <- secret("db-password") default("voxdocs_secure_password_change_in_production")
+      env: DB_PASSWORD
+
+    database-url:
+      type: string
+      env: DATABASE_URL
+      value: <- `postgresql+asyncpg://${db-user}:${db-pass}@${db-host}:${db-port}/${db-name}`
+
+    debug:
+      type: bool
+      value: false
+      env: DEBUG
+
+    secret-key:
+      type: string
+      value: <- secret("secret-key") default("change-me-in-production-use-strong-key")
+      env: SECRET_KEY
+    master-key:
+      type: string
+      value: <- secret("master-key") default("change-me-in-production-32-bytes!")
+      env: MASTER_KEY
+
+    whisper-model:
+      type: string
+      value: medium
+      env: WHISPER_MODEL
+    whisper-device:
+      type: string
+      value: cpu
+      env: WHISPER_DEVICE
+
+    use-llm-correction:
+      type: bool
+      value: true
+      env: USE_LLM_CORRECTION
+    llm-provider:
+      type: string
+      value: ollama
+      env: LLM_PROVIDER
+    ollama-host:
+      type: string
+      env: OLLAMA_HOST
+      value: <- "http://" connection-hostname("ollama") ":" connection-port("ollama") concat-all
+    llm-model:
+      type: string
+      value: mistral
+      env: LLM_MODEL
+
+    piper-executable:
+      type: string
+      value: piper
+      env: PIPER_EXECUTABLE
+    piper-voice-model:
+      type: string
+      value: /app/models/de_DE-thorsten-high
+      env: PIPER_VOICE_MODEL
+    tts-output-dir:
+      type: string
+      value: /app/storage/tts
+      env: TTS_OUTPUT_DIR
+
+    batch-processing-hour:
+      type: int
+      value: 2
+      env: BATCH_PROCESSING_HOUR
+    retention-days:
+      type: int
+      value: 90
+      env: RETENTION_DAYS
+    max-audio-duration-seconds:
+      type: int
+      value: 3600
+      env: MAX_AUDIO_DURATION_SECONDS
+  permitted-secrets:
+    db-password: true
+    secret-key: true
+    master-key: true
+
+frontend:
+  defines: runnable
+  containers:
+    main:
+      image: voxdocs-frontend:latest
+  services:
+    web:
+      container: main
+      port: 80
+      protocol: tcp
+
+  connections:
+    backend:
+      target: voxdocs/backend
+      service: http
+  depends:
+    wait-for:
+      runnables:
+        - voxdocs/backend
+      timeout: 60
+  checks:
+    readiness:
+      code: http-get-service("voxdocs/frontend", "web", "/") get-member("status") 200 eq?
+      period: 10
+      initialDelay: 5
+    liveness:
+      code: http-get-service("voxdocs/frontend", "web", "/") get-member("status") 200 eq?
+      period: 30
+      initialDelay: 10
+  variables:
+    backend-url:
+      type: string
+      # nginx.conf.template uses this value at container start via envsubst.
+      # Must include scheme; include trailing slash behavior unchanged (nginx handles it).
+      value: <- "http://" connection-hostname("backend") ":" connection-port("backend") concat-all
+      env: BACKEND_URL
+
+#
+# Cloudflare Tunnel (publishes ONLY the frontend via Cloudflare)
+#
+cf-tunnel:
+  defines: cloudflare/cloudflare-tunnel
+  name: voxdocs-tunnel
+  account_id: <- secret("cloudflare-account-id")
+  # API token secret name (provided by Cloudflare integration)
+  secret_ref: cloudflare-api-token
+  # Tunnel token is generated/written by the entity; not user-provided
+  token_secret_ref: cloudflare-tunnel-token
+  services:
+    data:
+      protocol: custom
+  permitted-secrets:
+    cloudflare-account-id: true
+    cloudflare-tunnel-token: true
+    cloudflare-api-token: true
+
+cf-frontend-app:
+  defines: cloudflare/cloudflare-tunnel-application
+  account_id: <- secret("cloudflare-account-id")
+  secret_ref: cloudflare-api-token
+  tunnel_id: <- connection-target("tunnel") entity-state get-member("id")
+  hostname: voxdocs.thisbetterbe.online
+  zone_name: thisbetterbe.online
+  service: <- "http://" connection-hostname("frontend") ":" connection-port("frontend") concat-all
+  services:
+    data:
+      protocol: custom
+  connections:
+    tunnel:
+      target: voxdocs/cf-tunnel
+      service: data
+    frontend:
+      target: voxdocs/frontend
+      service: web
+  depends:
+    wait-for:
+      runnables:
+        - voxdocs/cf-tunnel
+        - voxdocs/frontend
+      timeout: 60
+  permitted-secrets:
+    cloudflare-account-id: true
+    cloudflare-api-token: true
+
+cloudflared:
+  defines: runnable
+  inherits: cloudflare/cloudflared
+  connections:
+    app:
+      target: voxdocs/frontend
+      service: web
+  # cloudflared reads the tunnel token from the secret created by cf-tunnel
+  depends:
+    wait-for:
+      runnables:
+        - voxdocs/cf-tunnel
+        - voxdocs/frontend
+      timeout: 180
+  permitted-secrets:
+    cloudflare-tunnel-token: true
+
+stack:
+  defines: group
+  members:
+    - voxdocs/db
+    - voxdocs/ollama
+    - voxdocs/backend
+    - voxdocs/frontend
+    - voxdocs/cf-tunnel
+    - voxdocs/cf-frontend-app
+    - voxdocs/cloudflared

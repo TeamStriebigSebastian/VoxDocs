@@ -1,0 +1,9 @@
+REPO voxdocs
+LOAD voxdocs.yaml
+ENTRY voxdocs/stack
+ENV local
+ENTRY local:voxdocs/stack
+# Optional overrides (defaults are provided in voxdocs.yaml via fallback values)
+SECRET db-password secret-key master-key cloudflare-api-token cloudflare-account-id cloudflare-tunnel-token
+IMAGE voxdocs-backend:latest voxdocs/backend backend Dockerfile
+IMAGE voxdocs-frontend:latest voxdocs/frontend frontend Dockerfile
