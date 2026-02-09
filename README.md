@@ -2,6 +2,7 @@
 
 A local-first, privacy-focused speech documentation system for multilingual teams. It allows users to speak in their native language, automatically translates to the team's language, tracks tasks from voice reports, and securely attaches photos.
 Designed for teams where members speak different languages but need to collaborate seamlessly. No uploading of sensitive data to the cloud.
+Over the MCP Server integration, it enables AI Agents to ask specific questions towards the documentation. Finding the needle in the haystack!
 
 ## Features
 
