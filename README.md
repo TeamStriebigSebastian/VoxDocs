@@ -11,7 +11,7 @@ Over the MCP Server integration, it enables AI Agents to ask specific questions 
 - **Automatic Classification**: AI-based categorization of tasks, notes, and updates (identifying custom categories)
 - **Multilingual Support**: Speak in ANY language, get documentation in your configured language
 - **GDPR Compliant**: Complete on-premise deployment with AES-256 encryption
-- **Multi-Room Support**: Handle multiple treatment rooms per practice
+- **Multi-Group Support**: Configure different groups, with different categories, down to the classification prompt
 - **Export Integration**: Zip (CSV + photos) export for creating reports, like billing
 
 ## Architecture
