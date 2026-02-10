@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VoxDocs Voice Agent</string>
+    <string name="subtitle">Hands-free documentation assistant</string>
+
+    <string name="hint_server_url">Server URL (e.g. https://voxdocs.local:8000)</string>
+    <string name="hint_auth_token">Auth Token (JWT)</string>
+    <string name="btn_save">Save Settings</string>
+    <string name="btn_battery">Disable Battery Optimization</string>
+
+    <string name="switch_listening">Enable Listening</string>
+    <string name="switch_auto_start">Auto-start after reboot</string>
+
+    <string name="status_configure">⚙️  Configure server URL and auth token</string>
+    <string name="status_listening">🎤  Listening for \"Hey VoxDocs\"…</string>
+    <string name="status_ready">⏸️  Ready — enable listening to start</string>
+
+    <string name="info_wakeword">Say \"Hey VoxDocs\" followed by a command.\n\nExamples:\n• \"Hey VoxDocs, für Demian, wir müssen die Medizin holen.\"\n• \"Hey VoxDocs, zeig mir die offenen Aufgaben für Demian.\"</string>
+</resources>

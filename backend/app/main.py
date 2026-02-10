@@ -20,7 +20,7 @@ from app.models import *
 # but per User Request we focusing on 'Cases' and 'Entries'.
 # However, we must ensure all models are imported in app/models/__init__.py
 
-from app.api import cases, entries, tasks, categories, health, users, groups, webhooks, auth, settings as settings_router, translation, exports
+from app.api import cases, entries, tasks, categories, health, users, groups, webhooks, auth, settings as settings_router, translation, exports, voice
 from app.core.database import init_db, get_db_session
 from app.utils.seeding import seed_default_platform_data
 
@@ -83,6 +83,7 @@ app.include_router(auth.router, prefix="/api") # Authentication
 app.include_router(settings_router.router, prefix="/api")
 app.include_router(translation.router, prefix="/api")
 app.include_router(exports.router, prefix="/api")
+app.include_router(voice.router, prefix="/api")   # Voice Agent
 
 # Keeping appointments router for reference but we are shifting to generic platform
 # app.include_router(appointments.router) 
