@@ -234,6 +234,40 @@ async def process_audio_queue():
                     except Exception as llm_err:
                         logger.error(f"Task AI analysis failed: {llm_err}")
 
+                    # ─── 4e. RAG INGESTION ────────────────────────────────
+                    try:
+                        from mcp_server.tools.ingest import execute_ingest
+                        
+                        # Collect unique category names
+                        cat_id_map = {c.id: c.name for c in categories}
+                        unique_cat_names = list({cat_id_map[cid] for cid in chunk_category_ids if cid in cat_id_map})
+                        
+                        logger.info(f"Ingesting entry {entry.uuid} into RAG with categories: {unique_cat_names}")
+                        
+                        # We need author name. Fetch if not available.
+                        author_name = "System"
+                        if entry.author_id:
+                            # Try to reuse existing author obj or fetch
+                            if 'author' in locals() and author:
+                                author_name = author.username
+                            else:
+                                author_obj = await db.get(User, entry.author_id)
+                                if author_obj:
+                                    author_name = author_obj.username
+                        
+                        await execute_ingest(
+                            case_id=entry.case_file.uuid,
+                            text=transcript,
+                            group_id=str(entry.case_file.group_id),
+                            author=author_name,
+                            source_type="whisper_transcript",
+                            source_ref=entry.uuid,
+                            categories=unique_cat_names
+                        )
+                    except Exception as ingest_err:
+                        logger.error(f"RAG Ingestion failed: {ingest_err}")
+
+
                 except Exception as e:
                     logger.error(f"Failed to transcribe entry {entry.uuid}: {e}")
                     entry.audio_status = AudioStatus.FAILED

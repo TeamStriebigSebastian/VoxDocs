@@ -79,6 +79,11 @@ services:
       - LLM_PROVIDER=ollama
       - OLLAMA_HOST=http://ollama:11434
       - LLM_MODEL=${LLM_MODEL:-mistral}
+      # Shared RAG Configuration
+      - MCP_CHROMA_PERSIST_DIR=/app/data/chromadb
+      - MCP_CHROMA_COLLECTION_NAME=voxdocs_chunks_multi
+      - MCP_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+      - MCP_OLLAMA_BASE_URL=http://ollama:11434
       # Model will auto-download on first use
       # Alternatives: llama3.2, gemma2, qwen2.5
 
@@ -93,6 +98,8 @@ services:
       # Other
       - BATCH_PROCESSING_HOUR=2
       - RETENTION_DAYS=90
+    ports:
+      - "8000:8000"
     volumes:
       # Code mount for hot-reloading
       - ./backend:/app
@@ -101,6 +108,7 @@ services:
       - voxdocs-storage:/app/storage
       - voxdocs-models:/app/models
       - voxdocs-logs:/app/logs
+      - chromadb-data:/app/data/chromadb
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*' --reload
     networks:
       - voxdocs-network
@@ -158,11 +166,13 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - LLM_MODEL=${LLM_MODEL:-mistral}
       - MCP_CHROMA_PERSIST_DIR=/app/data/chromadb
-      - MCP_EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - MCP_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
+      - MCP_CHROMA_COLLECTION_NAME=voxdocs_chunks_multi
       - MCP_SAFE_MODE=false
       - MCP_MAX_CONCURRENT_JOBS=2
       - MCP_USERS_FILE=/app/data/mcp_users.json
       - MCP_AUDIT_LOG_FILE=/app/logs/mcp_audit.jsonl
+      - MCP_MAX_DISTANCE=0.7
     volumes:
       - ./backend:/app
       - voxdocs-data:/app/data

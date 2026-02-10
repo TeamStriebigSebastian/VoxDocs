@@ -91,6 +91,7 @@ async def execute_ingest(
     author: str,
     source_type: str = "whisper_transcript",
     source_ref: str = "",
+    categories: Optional[list[str]] = None,
 ) -> dict:
     """
     Execute the ingest_transcript tool.
@@ -120,6 +121,8 @@ async def execute_ingest(
             
             # 3. Prepare metadata for each chunk
             metadatas = []
+            category_str = ",".join(categories) if categories else ""
+            
             for i, chunk in enumerate(chunks):
                 metadatas.append({
                     "case_id": case_id,
@@ -127,6 +130,7 @@ async def execute_ingest(
                     "author": author,
                     "source_type": source_type,
                     "source_ref": source_ref,
+                    "categories": category_str,
                     "version": 1,
                     "chunk_index": i,
                 })

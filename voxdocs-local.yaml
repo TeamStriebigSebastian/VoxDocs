@@ -1,5 +1,13 @@
 namespace: voxdocs
 
+# Local deployment template with Cloudflare Tunnel publishing the frontend at:
+# - voxdocs.de
+# - www.voxdocs.de
+#
+# Notes:
+# - No host ports are published; Cloudflare Tunnel is the only public entrypoint.
+# - Services communicate via Monk connections (no hardcoded hostnames).
+
 # PostgreSQL (internal only)
 db:
   defines: runnable
@@ -248,8 +256,36 @@ cf-frontend-app:
   account_id: <- secret("cloudflare-account-id")
   secret_ref: cloudflare-api-token
   tunnel_id: <- connection-target("tunnel") entity-state get-member("id")
-  hostname: voxdocs.thisbetterbe.online
-  zone_name: thisbetterbe.online
+  hostname: voxdocs.de
+  zone_name: voxdocs.de
+  service: <- "http://" connection-hostname("frontend") ":" connection-port("frontend") concat-all
+  services:
+    data:
+      protocol: custom
+  connections:
+    tunnel:
+      target: voxdocs/cf-tunnel
+      service: data
+    frontend:
+      target: voxdocs/frontend
+      service: web
+  depends:
+    wait-for:
+      runnables:
+        - voxdocs/cf-tunnel
+        - voxdocs/frontend
+      timeout: 60
+  permitted-secrets:
+    cloudflare-account-id: true
+    cloudflare-api-token: true
+
+cf-frontend-app-www:
+  defines: cloudflare/cloudflare-tunnel-application
+  account_id: <- secret("cloudflare-account-id")
+  secret_ref: cloudflare-api-token
+  tunnel_id: <- connection-target("tunnel") entity-state get-member("id")
+  hostname: www.voxdocs.de
+  zone_name: voxdocs.de
   service: <- "http://" connection-hostname("frontend") ":" connection-port("frontend") concat-all
   services:
     data:
@@ -274,16 +310,6 @@ cf-frontend-app:
 cloudflared:
   defines: runnable
   inherits: cloudflare/cloudflared
-  variables:
-    # Explicitly read the tunnel token from this secret (required by MANIFEST)
-    CLOUDFLARED_TOKEN:
-      type: string
-      value: <- secret("cloudflare-tunnel-token")
-      env: CLOUDFLARED_TOKEN
-  connections:
-    app:
-      target: voxdocs/frontend
-      service: web
   # cloudflared reads the tunnel token from the secret created by cf-tunnel
   depends:
     wait-for:
@@ -303,4 +329,5 @@ stack:
     - voxdocs/frontend
     - voxdocs/cf-tunnel
     - voxdocs/cf-frontend-app
+    - voxdocs/cf-frontend-app-www
     - voxdocs/cloudflared

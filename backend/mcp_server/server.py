@@ -102,6 +102,7 @@ async def ingest_transcript(
     author: str,
     source_type: str = "whisper_transcript",
     source_ref: str = "",
+    categories: list[str] = None,
 ) -> dict:
     """
     Ingest a transcript into the VoxDocs RAG database.
@@ -116,6 +117,7 @@ async def ingest_transcript(
         author: Author identifier
         source_type: Type of source (whisper_transcript, note, imported_doc)
         source_ref: Optional reference to source document
+        categories: Optional list of categories to associate with chunks
         
     Returns:
         Ingestion result with chunk count
@@ -129,6 +131,7 @@ async def ingest_transcript(
         author=author,
         source_type=source_type,
         source_ref=source_ref,
+        categories=categories,
     )
 
 

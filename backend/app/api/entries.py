@@ -205,6 +205,32 @@ async def create_entry(
         await db.refresh(new_entry)
         
         logger.info(f"Created entry {new_entry.uuid} for case {case.uuid} (Audio: {bool(audio_key)})")
+
+        # RAG Ingestion (Text only, audio handles its own ingestion)
+        # Only ingest if there is text and it's NOT a pending audio (which starts empty/minimal)
+        # If user posts text+audio, we might overlap. 
+        # But usually CreateEntry with audio has empty text or description. 
+        # Let's ingest if text is substantial? Or just if no audio_file.
+        if text and not audio_file:
+            try:
+                from mcp_server.tools.ingest import execute_ingest
+                
+                cat_names = []
+                if category_id and 'category' in locals() and category:
+                    cat_names = [category.name]
+                
+                await execute_ingest(
+                    case_id=case.uuid,
+                    text=text,
+                    group_id=str(case.group_id),
+                    author=current_user.username,
+                    source_type="note",
+                    source_ref=new_entry.uuid,
+                    categories=cat_names
+                )
+                logger.info(f"Ingested text entry {new_entry.uuid} into RAG")
+            except Exception as ingest_err:
+                logger.error(f"RAG Ingestion for text entry failed: {ingest_err}")
         
         return {
             "uuid": new_entry.uuid,
