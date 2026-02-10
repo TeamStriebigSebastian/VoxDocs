@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.models import CategoryDefinition, Group, User, UserRole
 from app.core.dependencies import get_current_active_user
+from app.core.llm import llm_client
 
 router = APIRouter(prefix="/categories", tags=["Categories"])
 
@@ -105,7 +106,7 @@ async def create_category(
             guidelines=category_in.guidelines,
             keywords=category_in.keywords,
             structure_schema=category_in.structure_schema or {},
-            prompt_template=category_in.prompt_template,
+            prompt_template=category_in.prompt_template or llm_client.DEFAULT_CATEGORIZE_PROMPT,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -135,7 +136,12 @@ async def list_categories(
     try:
         query = select(CategoryDefinition).where(CategoryDefinition.group_id == group_id).order_by(CategoryDefinition.name)
         result = await db.execute(query)
-        return result.scalars().all()
+        categories = result.scalars().all()
+        # Fallback to default prompt for display
+        for cat in categories:
+            if not cat.prompt_template:
+                cat.prompt_template = llm_client.DEFAULT_CATEGORIZE_PROMPT
+        return categories
     except Exception as e:
         logger.error(f"Error listing categories: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -155,6 +161,9 @@ async def get_category(
         # Check permission for this category's group
         check_group_permission(current_user, category.group_id, UserRole.VIEWER)
         
+        if not category.prompt_template:
+            category.prompt_template = llm_client.DEFAULT_CATEGORIZE_PROMPT
+            
         return category
     except HTTPException:
         raise
