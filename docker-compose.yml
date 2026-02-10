@@ -7,7 +7,7 @@
 # - Piper TTS with German Thorsten voice reads back the documentation
 # - All processing happens LOCALLY (no external APIs for patient data!)
 
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database (for nursing appointments)
@@ -24,7 +24,7 @@ services:
     networks:
       - voxdocs-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U voxdocs" ]
+      test: ["CMD-SHELL", "pg_isready -U voxdocs"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -110,7 +110,7 @@ services:
       ollama:
         condition: service_started
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -131,11 +131,47 @@ services:
     networks:
       - voxdocs-network
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/" ]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost/",
+        ]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 10s
+
+  # MCP Server - Secure RAG Gateway
+  mcp-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voxdocs-mcp
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - LLM_MODEL=${LLM_MODEL:-mistral}
+      - MCP_CHROMA_PERSIST_DIR=/app/data/chromadb
+      - MCP_EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - MCP_SAFE_MODE=false
+      - MCP_MAX_CONCURRENT_JOBS=2
+      - MCP_USERS_FILE=/app/data/mcp_users.json
+      - MCP_AUDIT_LOG_FILE=/app/logs/mcp_audit.jsonl
+    volumes:
+      - ./backend:/app
+      - voxdocs-data:/app/data
+      - voxdocs-logs:/app/logs
+      - chromadb-data:/app/data/chromadb
+    command: python -m mcp_server.server
+    networks:
+      - voxdocs-network
+    depends_on:
+      ollama:
+        condition: service_started
 
 # Named volumes for persistent data
 volumes:
@@ -150,6 +186,8 @@ volumes:
   voxdocs-models:
     driver: local
   voxdocs-logs:
+    driver: local
+  chromadb-data:
     driver: local
 
 # Network configuration

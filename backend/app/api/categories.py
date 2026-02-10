@@ -59,12 +59,14 @@ class CategoryCreate(BaseModel):
     guidelines: Optional[str] = None
     keywords: Optional[str] = None
     structure_schema: Optional[dict] = {}
+    prompt_template: Optional[str] = None
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     guidelines: Optional[str] = None
     keywords: Optional[str] = None
     structure_schema: Optional[dict] = None
+    prompt_template: Optional[str] = None
 
 class CategoryResponse(BaseModel):
     id: int
@@ -73,6 +75,7 @@ class CategoryResponse(BaseModel):
     guidelines: Optional[str]
     keywords: Optional[str]
     structure_schema: dict
+    prompt_template: Optional[str]
     created_at: datetime
     updated_at: Optional[datetime]
 
@@ -102,6 +105,7 @@ async def create_category(
             guidelines=category_in.guidelines,
             keywords=category_in.keywords,
             structure_schema=category_in.structure_schema or {},
+            prompt_template=category_in.prompt_template,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -182,6 +186,8 @@ async def update_category(
             category.keywords = category_in.keywords
         if category_in.structure_schema is not None:
             category.structure_schema = category_in.structure_schema
+        if category_in.prompt_template is not None:
+            category.prompt_template = category_in.prompt_template
             
         category.updated_at = datetime.utcnow()
         await db.commit()

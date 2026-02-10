@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import String, Integer, ForeignKey, DateTime, JSON
+from sqlalchemy import String, Integer, ForeignKey, DateTime, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -16,6 +16,7 @@ class CategoryDefinition(Base):
     guidelines: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Markdown
     keywords: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Comma-separated keywords
     structure_schema: Mapped[dict] = mapped_column(JSON, default={}) # JSON Schema
+    prompt_template: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # Custom LLM prompt per category
     
     version: Mapped[int] = mapped_column(Integer, default=1)
     

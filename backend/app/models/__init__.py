@@ -9,6 +9,7 @@ from app.models.entry_translation import EntryTranslation
 from app.models.task import Task, TaskType, TaskStatus
 from app.models.task_translation import TaskTranslation
 from app.models.category import CategoryDefinition
+from app.models.entry_chunk import EntryChunk
 from app.models.audit import AuditEvent
 
 # Deprecated / Legacy (Commented out to force breakage/refactor)
@@ -32,5 +33,6 @@ __all__ = [
     "TaskType",
     "TaskStatus",
     "CategoryDefinition",
+    "EntryChunk",
     "AuditEvent",
 ]
