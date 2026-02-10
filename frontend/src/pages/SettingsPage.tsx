@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, FolderTree, Trash2, Edit2, User as UserIcon, Building, Users, Globe } from 'lucide-react'
+import { Plus, FolderTree, Trash2, Edit2, User as UserIcon, Building, Users, Globe, Smartphone } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTranslation } from 'react-i18next'
+import { QRCodeSVG } from 'qrcode.react'
 
 // Interfaces
 interface Category {
@@ -479,6 +480,48 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile App QR Code */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="bg-violet-100 p-2 rounded-lg">
+            <Smartphone className="w-5 h-5 text-violet-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">📱 Mobile App Setup</h2>
+            <p className="text-sm text-slate-500">Scan this QR code with the VoxDocs Voice Agent app</p>
+          </div>
+        </div>
+        <div className="flex flex-col md:flex-row items-center gap-8">
+          <div className="bg-white p-4 rounded-xl border-2 border-dashed border-violet-200 inline-block">
+            <QRCodeSVG
+              value={`voxdocs://${window.location.hostname}:${window.location.port || '8000'}?token=${accessToken || ''}`}
+              size={200}
+              level="M"
+              bgColor="#ffffff"
+              fgColor="#1e1b4b"
+            />
+          </div>
+          <div className="flex-1 space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-semibold">Server URL</label>
+              <div className="text-slate-900 font-mono text-sm bg-slate-50 px-3 py-2 rounded border">
+                {`${window.location.protocol}//${window.location.hostname}:${window.location.port || '8000'}`}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-semibold">Token</label>
+              <div className="text-slate-900 font-mono text-xs bg-slate-50 px-3 py-2 rounded border truncate max-w-md">
+                {accessToken ? `${accessToken.substring(0, 20)}...` : 'Not logged in'}
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-2">
+              Open the VoxDocs Voice Agent app → tap "Scan QR Code" → point your camera at this code.
+              The app will auto-configure the server URL and auth token.
+            </p>
           </div>
         </div>
       </div>

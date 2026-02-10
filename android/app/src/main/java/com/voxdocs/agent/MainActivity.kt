@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -16,11 +17,13 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textview.MaterialTextView
+import com.voxdocs.agent.scanner.QrScannerActivity
 import com.voxdocs.agent.service.VoiceListenerService
 
 /**
  * Minimal settings screen.
  * Lets the user configure the backend URL, auth token, and toggle listening.
+ * Supports QR code scanning for quick setup.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -31,8 +34,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: MaterialTextView
     private lateinit var btnSave: MaterialButton
     private lateinit var btnBattery: MaterialButton
+    private lateinit var btnScanQr: MaterialButton
 
     private val settings by lazy { VoxDocsApp.instance.settings }
+
+    // QR scanner result handler
+    private val qrScanLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // Settings were updated by QrScannerActivity — reload UI
+            etServerUrl.setText(settings.serverUrl)
+            etAuthToken.setText(settings.authToken)
+            updateStatus()
+            Toast.makeText(this, "✅ Configuration imported from QR code!", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +62,7 @@ class MainActivity : AppCompatActivity() {
         tvStatus        = findViewById(R.id.tv_status)
         btnSave         = findViewById(R.id.btn_save)
         btnBattery      = findViewById(R.id.btn_battery)
+        btnScanQr       = findViewById(R.id.btn_scan_qr)
 
         // Load current settings
         etServerUrl.setText(settings.serverUrl)
@@ -54,6 +72,7 @@ class MainActivity : AppCompatActivity() {
 
         btnSave.setOnClickListener { saveSettings() }
         btnBattery.setOnClickListener { requestBatteryExclusion() }
+        btnScanQr.setOnClickListener { launchQrScanner() }
 
         switchListening.setOnCheckedChangeListener { _, isChecked ->
             settings.listeningEnabled = isChecked
@@ -70,6 +89,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Refresh fields in case QR scanner updated them
+        etServerUrl.setText(settings.serverUrl)
+        etAuthToken.setText(settings.authToken)
         updateStatus()
     }
 
@@ -78,6 +100,10 @@ class MainActivity : AppCompatActivity() {
         settings.authToken = etAuthToken.text?.toString()?.trim() ?: ""
         Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show()
         updateStatus()
+    }
+
+    private fun launchQrScanner() {
+        qrScanLauncher.launch(Intent(this, QrScannerActivity::class.java))
     }
 
     private fun startListening() {
