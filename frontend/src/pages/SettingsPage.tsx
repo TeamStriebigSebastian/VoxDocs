@@ -9,6 +9,7 @@ interface Category {
   name: string
   guidelines: string
   keywords: string | null
+  prompt_template: string | null
 }
 
 interface Group {
@@ -43,6 +44,7 @@ export default function SettingsPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [formName, setFormName] = useState('')
   const [formGuidelines, setFormGuidelines] = useState('')
+  const [formPromptTemplate, setFormPromptTemplate] = useState('')
   const [formKeywords, setFormKeywords] = useState('')
 
   // Server Settings
@@ -126,6 +128,7 @@ export default function SettingsPage() {
           body: JSON.stringify({
             name: formName,
             guidelines: formGuidelines,
+            prompt_template: formPromptTemplate,
             keywords: formKeywords
           })
         })
@@ -138,6 +141,7 @@ export default function SettingsPage() {
             group_id: selectedGroupId,
             name: formName,
             guidelines: formGuidelines,
+            prompt_template: formPromptTemplate,
             keywords: formKeywords
           })
         })
@@ -195,6 +199,7 @@ export default function SettingsPage() {
     setEditingCategory(cat)
     setFormName(cat.name)
     setFormGuidelines(cat.guidelines || '')
+    setFormPromptTemplate(cat.prompt_template || '')
     setFormKeywords(cat.keywords || '')
     setIsCreating(true)
   }
@@ -204,6 +209,7 @@ export default function SettingsPage() {
     setEditingCategory(null)
     setFormName('')
     setFormGuidelines('')
+    setFormPromptTemplate('')
     setFormKeywords('')
   }
 
@@ -404,10 +410,10 @@ export default function SettingsPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.categories.form.guidelines')}</label>
                   <textarea
-                    value={formGuidelines}
-                    onChange={e => setFormGuidelines(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 text-sm"
-                    rows={3}
+                    value={formPromptTemplate}
+                    onChange={e => setFormPromptTemplate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                    rows={10}
                     placeholder={t('settings.categories.form.guidelinesPlaceholder')}
                   />
                 </div>
