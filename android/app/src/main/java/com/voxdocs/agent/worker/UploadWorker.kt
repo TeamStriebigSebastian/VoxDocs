@@ -44,7 +44,7 @@ class UploadWorker(
                     locale = metaObj.optString("locale", "de-DE"),
                     capturedAt = metaObj.optString("capturedAt", ""),
                     caseName = metaObj.optString("caseName", ""),
-                    caseId = metaObj.optString("caseId", null),
+                    caseId = metaObj.optString("caseId", "").ifEmpty { null },
                     intent = metaObj.optString("intent", "CREATE"),
                     source = metaObj.optString("source", "phone"),
                     clientVersion = metaObj.optString("clientVersion", "0.1.0"),

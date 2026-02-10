@@ -64,7 +64,7 @@ class ApiClient(private val settings: SettingsStore) {
 
         IntakeCreateResponse(
             caseId = json.optString("caseId", ""),
-            noteId = json.optString("noteId", null),
+            noteId = json.optString("noteId", "").ifEmpty { null },
             createdTasks = json.optJSONArray("createdTasks")?.toTaskList() ?: emptyList(),
         )
     }
