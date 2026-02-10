@@ -45,6 +45,7 @@ class Entry(Base):
     category_definition: Mapped[Optional["CategoryDefinition"]] = relationship(back_populates="entries")
     author: Mapped["User"] = relationship(back_populates="entries")
     translations: Mapped[List["EntryTranslation"]] = relationship(back_populates="entry", cascade="all, delete-orphan")
+    chunks: Mapped[List["EntryChunk"]] = relationship(back_populates="entry", cascade="all, delete-orphan", order_by="EntryChunk.chunk_index")
     
     # Adjacency list for history
     # Adjacency list for history

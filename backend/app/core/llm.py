@@ -122,37 +122,32 @@ Text:
             logger.error(f"Translation failed: {e}")
             return text # Fallback to original
 
-    async def categorize_entry(self, text: str, categories: list) -> dict:
+    async def chunk_transcript(self, text: str) -> list[str]:
         """
-        Analyzes the text against the provided categories.
-        Returns the best matching category ID and the evidence snippet.
+        Semantically chunk a transcript into coherent segments using Ollama.
+        Returns a list of text chunks.
         """
-        if not categories:
-            return None
-            
-        cats_json = [{"id": c.id, "name": c.name, "keywords": c.keywords} for c in categories]
-        
-        prompt = f"""
-You are an intelligent categorization assistant.
-Analyze the following transcription and determine which category it belongs to.
+        if not text or len(text.strip()) < 50:
+            return [text.strip()] if text and text.strip() else []
 
-Categories:
-{json.dumps(cats_json, indent=2)}
+        prompt = f"""Du bist ein Assistent für semantisches Text-Chunking.
+Teile den folgenden Transkriptionstext in logische, inhaltlich zusammenhängende Abschnitte auf.
 
-Instructions:
-1. Select the BEST matching category based on the meaning and keywords.
-2. Extract the EXACT phrase or sentence fragment from the text that justifies this choice.
-3. If no category fits well, return null.
+Regeln:
+1. Jeder Abschnitt soll ein eigenständiges Thema oder eine zusammenhängende Aussage enthalten.
+2. Abschnitte sollten zwischen 1-5 Sätzen lang sein.
+3. Schneide niemals mitten im Satz ab.
+4. Behalte den Originaltext exakt bei (keine Korrekturen, keine Zusammenfassungen).
+5. Gib das Ergebnis als JSON-Array von Strings zurück.
 
-Return JSON format ONLY:
+Transkription:
+\"{text}\"
+
+Antworte NUR mit einem JSON-Objekt:
 {{
-  "category_id": <id or null>,
-  "evidence_snippet": "<exact text fragment>"
-}}
+  "chunks": ["Abschnitt 1...", "Abschnitt 2...", ...]
+}}"""
 
-Transcription:
-"{text}"
-"""
         try:
             response = await self.client.generate(
                 model=self.model,
@@ -161,10 +156,106 @@ Transcription:
                 format="json"
             )
             result = json.loads(response['response'])
-            return result
+            chunks = result.get("chunks", [])
+            
+            # Fallback: if LLM returns empty or invalid, return whole text
+            if not chunks or not isinstance(chunks, list):
+                logger.warning("LLM chunking returned invalid result, using full text as single chunk")
+                return [text.strip()]
+            
+            # Filter out empty chunks
+            chunks = [c.strip() for c in chunks if c and c.strip()]
+            return chunks if chunks else [text.strip()]
+            
         except Exception as e:
-            logger.error(f"Categorization failed: {e}")
+            logger.error(f"Semantic chunking failed: {e}")
+            # Fallback: split by double newlines or return as single chunk
+            fallback = [p.strip() for p in text.split("\n\n") if p.strip()]
+            return fallback if fallback else [text.strip()]
+
+    # Default blueprint prompt used when a category has no custom prompt_template
+    DEFAULT_CATEGORIZE_PROMPT = """Du bist ein intelligenter Kategorisierungs-Assistent.
+Analysiere den folgenden Textabschnitt und bestimme, zu welcher Kategorie er gehört.
+
+Kategorien:
+{categories_json}
+
+Anweisungen:
+1. Wähle die BESTE passende Kategorie basierend auf Bedeutung und Schlüsselwörtern.
+2. Extrahiere die EXAKTE Phrase oder den Satzabschnitt aus dem Text, der diese Wahl rechtfertigt.
+3. Wenn keine Kategorie gut passt, gib null zurück.
+
+Antworte NUR im JSON-Format:
+{{
+  "category_id": <id oder null>,
+  "evidence_snippet": "<exakter Textausschnitt>"
+}}
+
+Text:
+\"{text}\""""
+
+    async def categorize_chunk(self, text: str, categories: list) -> dict:
+        """
+        Categorize a single chunk against available categories.
+        Uses per-category prompt_template when available, falls back to default blueprint.
+        Returns the best matching category ID and the evidence snippet.
+        """
+        if not categories:
             return None
+
+        # Check if any category has a custom prompt
+        # If a category has a custom prompt, we run it individually for better precision
+        custom_cats = [c for c in categories if getattr(c, 'prompt_template', None)]
+        default_cats = [c for c in categories if not getattr(c, 'prompt_template', None)]
+
+        best_result = None
+
+        # Run categories with custom prompts individually
+        for cat in custom_cats:
+            try:
+                prompt = cat.prompt_template.format(
+                    text=text,
+                    category_name=cat.name,
+                    keywords=cat.keywords or ""
+                )
+                response = await self.client.generate(
+                    model=self.model,
+                    prompt=prompt,
+                    stream=False,
+                    format="json"
+                )
+                result = json.loads(response['response'])
+                # Custom prompts should return {"match": true/false, "evidence_snippet": "..."}
+                if result.get("match") or result.get("category_id") == cat.id:
+                    return {"category_id": cat.id, "evidence_snippet": result.get("evidence_snippet", "")}
+            except Exception as e:
+                logger.error(f"Custom prompt categorization failed for category {cat.id}: {e}")
+
+        # Run default categories as a batch
+        if default_cats:
+            cats_json = [{"id": c.id, "name": c.name, "keywords": c.keywords} for c in default_cats]
+            prompt = self.DEFAULT_CATEGORIZE_PROMPT.format(
+                categories_json=json.dumps(cats_json, indent=2, ensure_ascii=False),
+                text=text
+            )
+            try:
+                response = await self.client.generate(
+                    model=self.model,
+                    prompt=prompt,
+                    stream=False,
+                    format="json"
+                )
+                result = json.loads(response['response'])
+                if result and result.get("category_id"):
+                    return result
+            except Exception as e:
+                logger.error(f"Default categorization failed: {e}")
+
+        return None
+
+    async def categorize_entry(self, text: str, categories: list) -> dict:
+        """Legacy wrapper – delegates to categorize_chunk."""
+        return await self.categorize_chunk(text, categories)
 
 # Global instance
 llm_client = LLMClient()
