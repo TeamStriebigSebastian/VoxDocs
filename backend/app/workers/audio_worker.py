@@ -172,7 +172,6 @@ async def process_audio_queue():
 
                     # ─── 4d. AI TASK ANALYSIS ─────────────────────────────
                     try:
-                        from app.core.llm import llm_client
                         from app.models.task import Task, TaskStatus, TaskType
                         from datetime import datetime
                         

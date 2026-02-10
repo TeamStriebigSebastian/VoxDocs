@@ -48,6 +48,13 @@ async def transcribe_audio_file(file_path: str) -> str:
         
         # Combine segments into full text
         full_text = " ".join([segment.text for segment in segments_list]).strip()
+        
+        # Filter Hallucinations
+        if not full_text or "Thank you very much" in full_text or "Vielen Dank" in full_text:
+             if len(full_text) < 50: # Only if short
+                 logger.warning("Detected Whisper Hallucination/Silence. Returning empty.")
+                 return ""
+                 
         logger.info(f"Transcription complete: {len(full_text)} chars")
         return full_text
         
@@ -62,7 +69,9 @@ def _run_whisper(file_path):
         file_path, 
         beam_size=5,
         language=None, # Auto-detect
-        task="transcribe"
+        task="transcribe",
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500)
     )
     # Segments is a generator, so we must iterate to actually run inference
     return list(segments)

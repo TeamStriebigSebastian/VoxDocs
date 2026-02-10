@@ -28,10 +28,21 @@ async_session_maker = async_sessionmaker(
 )
 
 
+from sqlalchemy import text
+
 async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Auto-migration for prompt_template
+        try:
+            # PostgreSQL specific check/add
+            await conn.execute(text("ALTER TABLE category_definitions ADD COLUMN IF NOT EXISTS prompt_template TEXT;"))
+            logger.info("Schema check: prompt_template column ensured.")
+        except Exception as e:
+            logger.warning(f"Schema migration skipped/failed: {e}")
+            
     logger.info("Database initialized")
 
 
