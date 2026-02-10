@@ -109,6 +109,7 @@ Do not add any explanations, just return the translated text.
 
 Text:
 "{text}"
+
 """
         try:
             # logger.info(f"Translating text to {target_language}...")
@@ -172,6 +173,26 @@ Antworte NUR mit einem JSON-Objekt:
             # Fallback: split by double newlines or return as single chunk
             fallback = [p.strip() for p in text.split("\n\n") if p.strip()]
             return fallback if fallback else [text.strip()]
+
+    DEFAULT_SINGLE_CATEGORY_PROMPT = """Du bist ein Experte für Dokumentation.
+Prüfe, ob der folgende Textabschnitt zur Kategorie "{category_name}" passt.
+
+Keywords zur Orientierung: {keywords}
+
+Regeln:
+1. Analysiere den Text inhaltlich.
+2. Wenn der Text eindeutig zu "{category_name}" gehört, setze "match" auf true.
+3. Extrahiere den Beweis (Textstelle).
+4. Wenn unsicher oder unpassend, setze "match" auf false.
+
+Text:
+"{text}"
+
+Antworte NUR im JSON-Format:
+{{
+  "match": true/false,
+  "evidence_snippet": "..."
+}}"""
 
     # Default blueprint prompt used when a category has no custom prompt_template
     DEFAULT_CATEGORIZE_PROMPT = """Du bist ein intelligenter Kategorisierungs-Assistent.

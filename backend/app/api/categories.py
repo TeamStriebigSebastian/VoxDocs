@@ -106,7 +106,7 @@ async def create_category(
             guidelines=category_in.guidelines,
             keywords=category_in.keywords,
             structure_schema=category_in.structure_schema or {},
-            prompt_template=category_in.prompt_template or llm_client.DEFAULT_CATEGORIZE_PROMPT,
+            prompt_template=category_in.prompt_template or llm_client.DEFAULT_SINGLE_CATEGORY_PROMPT,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -140,7 +140,7 @@ async def list_categories(
         # Fallback to default prompt for display
         for cat in categories:
             if not cat.prompt_template:
-                cat.prompt_template = llm_client.DEFAULT_CATEGORIZE_PROMPT
+                cat.prompt_template = llm_client.DEFAULT_SINGLE_CATEGORY_PROMPT
         return categories
     except Exception as e:
         logger.error(f"Error listing categories: {e}")
@@ -162,7 +162,7 @@ async def get_category(
         check_group_permission(current_user, category.group_id, UserRole.VIEWER)
         
         if not category.prompt_template:
-            category.prompt_template = llm_client.DEFAULT_CATEGORIZE_PROMPT
+            category.prompt_template = llm_client.DEFAULT_SINGLE_CATEGORY_PROMPT
             
         return category
     except HTTPException:
